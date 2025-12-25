@@ -1,5 +1,5 @@
 # Build stage
-FROM node:lts-alpine as build
+FROM node:20-alpine as build
 
 RUN apk update; \
   apk add git;
