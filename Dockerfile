@@ -43,4 +43,4 @@ ENV PORT=1337
 USER node
 EXPOSE 1337
 
-CMD ["node", "server.js"]
+CMD ["node", "bin/parse-server"]
