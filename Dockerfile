@@ -7,8 +7,6 @@ RUN apk update && apk add git
 WORKDIR /tmp
 
 COPY package*.json ./
-
-# ❗ تعطيل postinstall هنا
 RUN npm ci --ignore-scripts
 
 COPY . .
@@ -16,7 +14,7 @@ RUN npm run build
 
 
 # =========================
-# Release stage
+# Runtime stage
 # =========================
 FROM node:20-alpine
 
@@ -26,8 +24,6 @@ WORKDIR /parse-server
 VOLUME /parse-server/cloud /parse-server/config
 
 COPY package*.json ./
-
-# ❗ تعطيل postinstall هنا أيضاً
 RUN npm ci --production --ignore-scripts
 
 COPY bin bin
@@ -35,7 +31,6 @@ COPY public_html public_html
 COPY views views
 COPY cloud cloud
 COPY --from=build /tmp/lib lib
-COPY server.js server.js
 
 RUN mkdir -p logs && chown -R node: logs
 
