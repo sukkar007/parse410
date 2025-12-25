@@ -33,4 +33,4 @@ ENV PORT=1337
 USER node
 EXPOSE $PORT
 
-ENTRYPOINT ["node", "./bin/parse-server"]
+ENTRYPOINT ["node", "server.js"]
