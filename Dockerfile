@@ -1,16 +1,5 @@
-# Build stage
-FROM node:16-alpine as build
-
-RUN apk add --no-cache git
-WORKDIR /tmp
-COPY package*.json ./
-COPY postinstall.js ./
-RUN npm ci --ignore-scripts
-COPY . .
-RUN npm run build
-
 # Release stage
-FROM node:16-alpine as release
+FROM node:16-alpine
 
 RUN apk add --no-cache git
 
@@ -19,13 +8,13 @@ WORKDIR /parse-server
 
 COPY package*.json ./
 COPY postinstall.js ./
-RUN npm ci --production --ignore-scripts
-
+COPY server.js ./
+COPY cloud cloud
 COPY bin bin
 COPY public_html public_html
 COPY views views
-COPY cloud cloud
-COPY --from=build /tmp/lib lib
+
+RUN npm ci --production --ignore-scripts
 
 RUN mkdir -p logs && chown -R node: logs
 
