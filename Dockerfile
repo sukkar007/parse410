@@ -1,4 +1,3 @@
-# Release stage
 FROM node:16-alpine
 
 RUN apk add --no-cache git
@@ -14,7 +13,8 @@ COPY bin bin
 COPY public_html public_html
 COPY views views
 
-RUN npm ci --production --ignore-scripts
+# تثبيت المتطلبات بشكل صحيح
+RUN npm ci --ignore-scripts
 
 RUN mkdir -p logs && chown -R node: logs
 
@@ -25,3 +25,5 @@ USER node
 EXPOSE 1337
 
 CMD ["npm", "start"]
+
+
