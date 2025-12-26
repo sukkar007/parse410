@@ -1,5 +1,5 @@
 const express = require('express');
-const { ParseServer } = require('./lib/index.js');
+const { ParseServer } = require('parse-server');
 const ParseDashboard = require('parse-dashboard');
 const http = require('http');
 const path = require('path');
