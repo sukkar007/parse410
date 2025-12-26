@@ -5,9 +5,9 @@ RUN apk add --no-cache git python3 make g++
 WORKDIR /parse-server
 
 COPY package.json ./
-COPY postinstall.js ./
 
-RUN npm install --legacy-peer-deps
+# الحل هنا 👇
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 COPY server.js ./
 COPY cloud cloud
