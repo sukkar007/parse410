@@ -14,7 +14,7 @@ COPY public_html public_html
 COPY views views
 
 # تثبيت المتطلبات بشكل صحيح
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 RUN mkdir -p logs && chown -R node: logs
 
