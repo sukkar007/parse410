@@ -19,6 +19,7 @@
   ],
   "license": "BSD-3-Clause",
   "dependencies": {
+    "parse-server": "4.10.4",
     "@apollographql/graphql-playground-html": "1.6.26",
     "@graphql-tools/links": "6.2.5",
     "@graphql-tools/stitch": "6.2.4",
@@ -118,15 +119,6 @@
   },
   "optionalDependencies": {
     "@node-rs/bcrypt": "0.4.1"
-  },
-  "collective": {
-    "type": "opencollective",
-    "url": "https://opencollective.com/parse-server",
-    "logo": "https://opencollective.com/parse-server/logo.txt?reverse=true&variant=binary"
-  },
-  "funding": {
-    "type": "opencollective",
-    "url": "https://opencollective.com/parse-server"
   },
   "husky": {
     "hooks": {
