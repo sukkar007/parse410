@@ -6,11 +6,11 @@ VOLUME /parse-server/cloud /parse-server/config
 WORKDIR /parse-server
 
 # نسخ ملفات الـ package أولاً
-COPY package*.json ./
+COPY package.json ./
 COPY postinstall.js ./
 
-# تثبيت جميع المتطلبات (بما في ذلك devDependencies للبناء)
-RUN npm ci
+# تثبيت جميع المتطلبات باستخدام npm install (يتجاهل lock file)
+RUN npm install
 
 # نسخ مجلد src للبناء
 COPY src src
@@ -24,9 +24,6 @@ COPY cloud cloud
 COPY bin bin
 COPY public_html public_html
 COPY views views
-
-# إضافة parse-dashboard كـ dependency
-RUN npm install parse-dashboard --save
 
 RUN mkdir -p logs && chown -R node: logs
 
