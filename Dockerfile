@@ -1,18 +1,13 @@
 FROM node:16-alpine
 
-RUN apk add --no-cache git python3 make g++ 
+RUN apk add --no-cache git python3 make g++
 
-VOLUME /parse-server/cloud /parse-server/config
 WORKDIR /parse-server
 
 COPY package.json ./
 COPY postinstall.js ./
 
-# الحل هنا 👇
 RUN npm install --legacy-peer-deps
-
-COPY src src
-RUN npm run build
 
 COPY server.js ./
 COPY cloud cloud
