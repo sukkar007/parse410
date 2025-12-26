@@ -1,0 +1,68 @@
+services:
+  - type: web
+    name: parse-server
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 1337
+      - key: HOST
+        value: 0.0.0.0
+      - key: APP_ID
+        value: myAppId
+      - key: MASTER_KEY
+        value: myMasterKey
+        sync: false
+      - key: CLIENT_KEY
+        value: myClientKey
+      - key: FILE_KEY
+        value: myFileKey
+      - key: REST_API_KEY
+        value: myRestApiKey
+        sync: false
+      - key: JAVA_KEY
+        value: myJavaKey
+      - key: DATABASE_URI
+        value: mongodb://localhost:27017/dev
+        sync: false
+      - key: SERVER_URL
+        value: https://parse-server.onrender.com/parse
+      - key: CLOUD_MAIN
+        value: ./cloud/main.js
+      - key: DASHBOARD_USER
+        value: admin
+      - key: DASHBOARD_PASS
+        value: admin123
+        sync: false
+      - key: REDIS_URL
+        value: redis://localhost:6379
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: pserv
+    name: parse-mongodb
+    runtime: docker
+    image: mongo:3.6
+    plan: free
+    envVars:
+      - key: MONGO_INITDB_DATABASE
+        value: dev
+    disk:
+      name: mongodb_data
+      mountPath: /data/db
+      sizeGB: 1
+
+  - type: pserv
+    name: parse-redis
+    runtime: docker
+    image: redis:7-alpine
+    plan: free
+    disk:
+      name: redis_data
+      mountPath: /data
+      sizeGB: 1

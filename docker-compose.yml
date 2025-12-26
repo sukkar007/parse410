@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  # MongoDB Database
+  # MongoDB Database 3.6
   mongodb:
-    image: mongo:4.4
+    image: mongo:3.6
     container_name: parse-mongodb
     ports:
       - "27017:27017"
@@ -14,7 +14,7 @@ services:
     networks:
       - parse-network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost/test --quiet
+      test: echo 'db.runCommand("ping").ok' | mongo localhost/test --quiet
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,7 +54,7 @@ services:
       REST_API_KEY: myRestApiKey
       JAVA_KEY: myJavaKey
       
-      # Database
+      # Database - MongoDB 3.6
       DATABASE_URI: mongodb://mongodb:27017/dev
       
       # Server URL
