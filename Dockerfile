@@ -4,7 +4,8 @@ FROM node:16-alpine as build
 RUN apk add --no-cache git
 WORKDIR /tmp
 COPY package*.json ./
-RUN npm ci
+COPY postinstall.js ./
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
@@ -17,6 +18,7 @@ VOLUME /parse-server/cloud /parse-server/config
 WORKDIR /parse-server
 
 COPY package*.json ./
+COPY postinstall.js ./
 RUN npm ci --production --ignore-scripts
 
 COPY bin bin
