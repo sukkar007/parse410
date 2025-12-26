@@ -1,11 +1,8 @@
-import express from 'express';
-import { ParseServer } from 'parse-server';
-import ParseDashboard from 'parse-dashboard';
-import http from 'http';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const express = require('express');
+const { ParseServer } = require('parse-server');
+const ParseDashboard = require('parse-dashboard');
+const http = require('http');
+const path = require('path');
 
 const app = express();
 
@@ -190,4 +187,4 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-export default app;
+module.exports = app;
