@@ -1,4 +1,3 @@
-
 const express = require('express');
 const { ParseServer } = require('parse-server');
 const ParseDashboard = require('parse-dashboard');
@@ -19,22 +18,25 @@ let pushConfig = undefined;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
     // تحويل Base64 إلى JSON
-    const firebaseServiceAccountJSON = Buffer.from(
-      process.env.FIREBASE_SERVICE_ACCOUNT,
-      'base64'
-    ).toString('utf8');
-
-    const parsed = JSON.parse(firebaseServiceAccountJSON);
-    console.log('✅ Firebase FCM Push enabled for project:', parsed.project_id);
+    const firebaseServiceAccount = JSON.parse(
+      Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8')
+    );
 
     pushConfig = {
       android: {
-        firebaseServiceAccount: parsed
+        firebaseAdminConfig: firebaseServiceAccount
+      },
+      ios: {
+        // إذا لم تستخدم iOS، اتركه فارغ أو اضبط الإعدادات الخاصة بك
+        pfx: '',
+        bundleId: '',
+        production: false
       }
-      // لا تضع أي إعدادات GCM هنا!
     };
+
+    console.log(`✅ Firebase FCM Push enabled for project: ${firebaseServiceAccount.project_id}`);
   } catch (e) {
-    console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON or Base64');
+    console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON');
     throw e;
   }
 } else {
@@ -78,26 +80,29 @@ app.use('/parse', parseServer);
 /* ===============================
    Parse Dashboard
    =============================== */
-const dashboard = new ParseDashboard({
-  apps: [
-    {
-      serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-      appId: process.env.APP_ID || 'myAppId',
-      masterKey: process.env.MASTER_KEY || 'myMasterKey',
-      clientKey: process.env.CLIENT_KEY || 'myClientKey',
-      fileKey: process.env.FILE_KEY || 'myFileKey',
-      restApiKey: process.env.REST_API_KEY || 'myRestApiKey',
-      appName: process.env.APP_NAME || 'MyParseApp'
-    }
-  ],
-  users: [
-    {
-      user: process.env.DASHBOARD_USER || 'admin',
-      pass: process.env.DASHBOARD_PASS || 'admin123'
-    }
-  ],
-  useEncryptedPasswords: false
-}, true);
+const dashboard = new ParseDashboard(
+  {
+    apps: [
+      {
+        serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
+        appId: process.env.APP_ID || 'myAppId',
+        masterKey: process.env.MASTER_KEY || 'myMasterKey',
+        clientKey: process.env.CLIENT_KEY || 'myClientKey',
+        fileKey: process.env.FILE_KEY || 'myFileKey',
+        restApiKey: process.env.REST_API_KEY || 'myRestApiKey',
+        appName: process.env.APP_NAME || 'MyParseApp'
+      }
+    ],
+    users: [
+      {
+        user: process.env.DASHBOARD_USER || 'admin',
+        pass: process.env.DASHBOARD_PASS || 'admin123'
+      }
+    ],
+    useEncryptedPasswords: false
+  },
+  true
+);
 
 app.use('/dashboard', dashboard);
 
