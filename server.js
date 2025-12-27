@@ -13,6 +13,9 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 👇 Serve static files (HTML, CSS, JS, images...) from public_html
+app.use(express.static(path.join(__dirname, 'public_html')));
+
 /* ===============================
    Push Notifications (Firebase FCM)
    =============================== */
@@ -29,12 +32,10 @@ const parseServer = new ParseServer({
   fileKey: process.env.FILE_KEY || 'myFileKey',
   restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
 
-  // 🔹 MongoDB Atlas URI
+  // 🔹 MongoDB URI
   databaseURI: process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
 
-  // URLs
   serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-
   cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
 
   filesAdapter: {
@@ -49,10 +50,8 @@ const parseServer = new ParseServer({
 
   allowClientClassCreation: true,
   allowCustomObjectId: true,
-
   defaultLimit: 100,
   maxLimit: 1000,
-
   enforcePrivateUsers: false,
 
   graphQLPath: '/graphql',
