@@ -6,18 +6,25 @@ const path = require('path');
 
 const app = express();
 
-// ✅ Trust Proxy مهم لـ Render + Dashboard
+/* ===============================
+   Trust Proxy (مهم جدًا لـ Render)
+   =============================== */
 app.set('trust proxy', 1);
 
-// Middleware
+/* ===============================
+   Middleware
+   =============================== */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 👇 Serve static files (HTML, CSS, JS, images...) from public_html
-app.use(express.static(path.join(__dirname, 'public_html')));
+/* ===============================
+   Static Files لموقعك فقط
+   (بدون تعارض مع Dashboard)
+   =============================== */
+app.use('/', express.static(path.join(__dirname, 'public_html')));
 
 /* ===============================
-   Push Notifications (Firebase FCM)
+   Firebase Push (معطّل)
    =============================== */
 let pushConfig = undefined;
 console.log('⚠️ Firebase Push disabled — running without push notifications');
@@ -26,17 +33,18 @@ console.log('⚠️ Firebase Push disabled — running without push notification
    Parse Server Configuration
    =============================== */
 const parseServer = new ParseServer({
-  appId: process.env.APP_ID || 'myAppId',
-  masterKey: process.env.MASTER_KEY || 'myMasterKey',
-  clientKey: process.env.CLIENT_KEY || 'myClientKey',
-  fileKey: process.env.FILE_KEY || 'myFileKey',
-  restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
+  appId: process.env.APP_ID,
+  masterKey: process.env.MASTER_KEY,
+  clientKey: process.env.CLIENT_KEY,
+  fileKey: process.env.FILE_KEY,
+  restAPIKey: process.env.REST_API_KEY,
 
-  // 🔹 MongoDB URI
-  databaseURI: process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
+  databaseURI: process.env.DATABASE_URI,
 
-  serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-  cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
+  serverURL: process.env.SERVER_URL,        // يجب أن يكون HTTPS
+  publicServerURL: process.env.SERVER_URL, // مهم للداش بورد
+
+  cloud: path.join(__dirname, 'cloud/main.js'),
 
   filesAdapter: {
     module: '@parse/fs-files-adapter',
@@ -50,9 +58,9 @@ const parseServer = new ParseServer({
 
   allowClientClassCreation: true,
   allowCustomObjectId: true,
+
   defaultLimit: 100,
   maxLimit: 1000,
-  enforcePrivateUsers: false,
 
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
@@ -61,12 +69,23 @@ const parseServer = new ParseServer({
   logLevel: process.env.LOG_LEVEL || 'info'
 });
 
-// Mount Parse API
+/* ===============================
+   Mount Parse API
+   =============================== */
 app.use('/parse', parseServer);
 
 /* ===============================
-   Parse Dashboard
+   Parse Dashboard (الحل الجذري)
    =============================== */
+
+// ⭐ static خاص بالداش بورد (مهم جدًا)
+app.use(
+  '/dashboard',
+  express.static(
+    path.join(__dirname, 'node_modules/parse-dashboard/public')
+  )
+);
+
 const dashboard = new ParseDashboard(
   {
     apps: [
@@ -79,47 +98,31 @@ const dashboard = new ParseDashboard(
     ],
     users: [
       {
-        user: process.env.DASHBOARD_USER || 'admin',
-        pass: process.env.DASHBOARD_PASS || 'admin123'
+        user: process.env.DASHBOARD_USER,
+        pass: process.env.DASHBOARD_PASS
       }
     ]
   },
   {
-    allowInsecureHTTP: true // مهم على Render
+    allowInsecureHTTP: false
   }
 );
 
 app.use('/dashboard', dashboard);
 
 /* ===============================
-   HTTP + Live Query Server
+   HTTP + LiveQuery Server
    =============================== */
 const httpServer = http.createServer(app);
 ParseServer.createLiveQueryServer(httpServer);
 
 /* ===============================
-   Health & Info
+   Health Check
    =============================== */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
-    parseServer: 'running',
-    liveQuery: 'enabled',
-    dashboard: 'available'
-  });
-});
-
-app.get('/info', (req, res) => {
-  res.json({
-    name: 'Parse Server',
-    version: '4.10.4',
-    endpoints: {
-      parse: '/parse',
-      dashboard: '/dashboard',
-      graphql: '/parse/graphql',
-      health: '/health'
-    }
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -135,14 +138,12 @@ app.use((err, req, res, next) => {
    Start Server
    =============================== */
 const PORT = process.env.PORT || 1337;
-const HOST = process.env.HOST || '0.0.0.0';
 
-httpServer.listen(PORT, HOST, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('════════════════════════════════════');
   console.log('✅ Parse Server 4.10.4 Running');
-  console.log(`📍 ${process.env.SERVER_URL || `http://${HOST}:${PORT}/parse`}`);
-  console.log(`📊 Dashboard: /dashboard`);
-  console.log(`🔔 Push: DISABLED`);
+  console.log(`📍 ${process.env.SERVER_URL}`);
+  console.log('📊 Dashboard: /dashboard');
   console.log('════════════════════════════════════');
 });
 
