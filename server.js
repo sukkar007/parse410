@@ -1,3 +1,4 @@
+
 const express = require('express');
 const { ParseServer } = require('parse-server');
 const ParseDashboard = require('parse-dashboard');
@@ -11,13 +12,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===============================
-   Push Notifications (Firebase FCM) Base64
+   Push Notifications (Firebase FCM)
    =============================== */
 let pushConfig = undefined;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
-    // تحويل Base64 إلى JSON صالح
+    // تحويل Base64 إلى JSON
     const firebaseServiceAccountJSON = Buffer.from(
       process.env.FIREBASE_SERVICE_ACCOUNT,
       'base64'
@@ -30,6 +31,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       android: {
         firebaseServiceAccount: parsed
       }
+      // لا تضع أي إعدادات GCM هنا!
     };
   } catch (e) {
     console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON or Base64');
@@ -43,50 +45,30 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
    Parse Server Configuration
    =============================== */
 const parseServer = new ParseServer({
-  // App Keys
   appId: process.env.APP_ID || 'myAppId',
   masterKey: process.env.MASTER_KEY || 'myMasterKey',
   clientKey: process.env.CLIENT_KEY || 'myClientKey',
   fileKey: process.env.FILE_KEY || 'myFileKey',
   restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
-
-  // Database
   databaseURI: process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
-
-  // URLs
   serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-
-  // Cloud Code
   cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
-
-  // Files Adapter
   filesAdapter: {
     module: '@parse/fs-files-adapter',
     params: { filesSubDir: 'files' }
   },
-
-  // Live Query
-  liveQuery: { classNames: ['*'], redisURL: process.env.REDIS_URL },
-
-  // Permissions
+  liveQuery: {
+    classNames: ['*'],
+    redisURL: process.env.REDIS_URL
+  },
   allowClientClassCreation: true,
   allowCustomObjectId: true,
-
-  // Limits
   defaultLimit: 100,
   maxLimit: 1000,
-
-  // Security
   enforcePrivateUsers: false,
-
-  // GraphQL
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
-
-  // Push Notifications
   push: pushConfig,
-
-  // Logs
   logLevel: process.env.LOG_LEVEL || 'info'
 });
 
@@ -96,29 +78,26 @@ app.use('/parse', parseServer);
 /* ===============================
    Parse Dashboard
    =============================== */
-const dashboard = new ParseDashboard(
-  {
-    apps: [
-      {
-        serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-        appId: process.env.APP_ID || 'myAppId',
-        masterKey: process.env.MASTER_KEY || 'myMasterKey',
-        clientKey: process.env.CLIENT_KEY || 'myClientKey',
-        fileKey: process.env.FILE_KEY || 'myFileKey',
-        restApiKey: process.env.REST_API_KEY || 'myRestApiKey',
-        appName: process.env.APP_NAME || 'MyParseApp'
-      }
-    ],
-    users: [
-      {
-        user: process.env.DASHBOARD_USER || 'admin',
-        pass: process.env.DASHBOARD_PASS || 'admin123'
-      }
-    ],
-    useEncryptedPasswords: false
-  },
-  true
-);
+const dashboard = new ParseDashboard({
+  apps: [
+    {
+      serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
+      appId: process.env.APP_ID || 'myAppId',
+      masterKey: process.env.MASTER_KEY || 'myMasterKey',
+      clientKey: process.env.CLIENT_KEY || 'myClientKey',
+      fileKey: process.env.FILE_KEY || 'myFileKey',
+      restApiKey: process.env.REST_API_KEY || 'myRestApiKey',
+      appName: process.env.APP_NAME || 'MyParseApp'
+    }
+  ],
+  users: [
+    {
+      user: process.env.DASHBOARD_USER || 'admin',
+      pass: process.env.DASHBOARD_PASS || 'admin123'
+    }
+  ],
+  useEncryptedPasswords: false
+}, true);
 
 app.use('/dashboard', dashboard);
 
