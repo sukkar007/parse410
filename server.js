@@ -11,24 +11,26 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===============================
-   Push Notifications (Firebase FCM)
+   Push Notifications (Firebase FCM) Base64
    =============================== */
 let pushConfig = undefined;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
-    // فك ترميز Base64 لمتغير البيئة وتحويله إلى JSON
+    // تحويل Base64 إلى JSON صالح
     const firebaseServiceAccountJSON = Buffer.from(
       process.env.FIREBASE_SERVICE_ACCOUNT,
       'base64'
     ).toString('utf8');
 
+    const parsed = JSON.parse(firebaseServiceAccountJSON);
+    console.log('✅ Firebase FCM Push enabled for project:', parsed.project_id);
+
     pushConfig = {
       android: {
-        firebaseServiceAccount: JSON.parse(firebaseServiceAccountJSON)
+        firebaseServiceAccount: parsed
       }
     };
-    console.log('✅ Firebase FCM Push enabled');
   } catch (e) {
     console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON or Base64');
     throw e;
@@ -57,17 +59,14 @@ const parseServer = new ParseServer({
   // Cloud Code
   cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
 
-  // Files
+  // Files Adapter
   filesAdapter: {
     module: '@parse/fs-files-adapter',
     params: { filesSubDir: 'files' }
   },
 
   // Live Query
-  liveQuery: {
-    classNames: ['*'],
-    redisURL: process.env.REDIS_URL
-  },
+  liveQuery: { classNames: ['*'], redisURL: process.env.REDIS_URL },
 
   // Permissions
   allowClientClassCreation: true,
@@ -84,7 +83,7 @@ const parseServer = new ParseServer({
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
 
-  // Push Notifications (Firebase FCM)
+  // Push Notifications
   push: pushConfig,
 
   // Logs
