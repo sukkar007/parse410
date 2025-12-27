@@ -13,64 +13,63 @@ app.use(express.urlencoded({ extended: true }));
 /* ===============================
    Push Notifications (Firebase FCM)
    =============================== */
+// تم تعطيل Push نهائيًا لتجنب مشاكل GCM/Firebase
 let pushConfig = undefined;
-
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  try {
-    // تحويل Base64 إلى JSON
-    const firebaseServiceAccount = JSON.parse(
-      Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8')
-    );
-
-    pushConfig = {
-      android: {
-        firebaseAdminConfig: firebaseServiceAccount
-      },
-      ios: {
-        // إذا لم تستخدم iOS، اتركه فارغ أو اضبط الإعدادات الخاصة بك
-        pfx: '',
-        bundleId: '',
-        production: false
-      }
-    };
-
-    console.log(`✅ Firebase FCM Push enabled for project: ${firebaseServiceAccount.project_id}`);
-  } catch (e) {
-    console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON');
-    throw e;
-  }
-} else {
-  console.log('⚠️ Firebase Push disabled (no FIREBASE_SERVICE_ACCOUNT)');
-}
+console.log('⚠️ Firebase Push disabled — running without push notifications');
 
 /* ===============================
    Parse Server Configuration
    =============================== */
 const parseServer = new ParseServer({
+  // App Keys
   appId: process.env.APP_ID || 'myAppId',
   masterKey: process.env.MASTER_KEY || 'myMasterKey',
   clientKey: process.env.CLIENT_KEY || 'myClientKey',
   fileKey: process.env.FILE_KEY || 'myFileKey',
   restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
+
+  // Database
   databaseURI: process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
+
+  // URLs
   serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
+
+  // Cloud Code
   cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
+
+  // Files
   filesAdapter: {
     module: '@parse/fs-files-adapter',
-    params: { filesSubDir: 'files' }
+    params: {
+      filesSubDir: 'files'
+    }
   },
+
+  // Live Query
   liveQuery: {
     classNames: ['*'],
     redisURL: process.env.REDIS_URL
   },
+
+  // Permissions
   allowClientClassCreation: true,
   allowCustomObjectId: true,
+
+  // Limits
   defaultLimit: 100,
   maxLimit: 1000,
+
+  // Security
   enforcePrivateUsers: false,
+
+  // GraphQL
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
+
+  // Push Notifications
   push: pushConfig,
+
+  // Logs
   logLevel: process.env.LOG_LEVEL || 'info'
 });
 
@@ -84,7 +83,8 @@ const dashboard = new ParseDashboard(
   {
     apps: [
       {
-        serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
+        serverURL:
+          process.env.SERVER_URL || 'http://localhost:1337/parse',
         appId: process.env.APP_ID || 'myAppId',
         masterKey: process.env.MASTER_KEY || 'myMasterKey',
         clientKey: process.env.CLIENT_KEY || 'myClientKey',
@@ -157,7 +157,7 @@ httpServer.listen(PORT, HOST, () => {
   console.log('✅ Parse Server 4.10.4 Running');
   console.log(`📍 ${process.env.SERVER_URL || `http://${HOST}:${PORT}/parse`}`);
   console.log(`📊 Dashboard: /dashboard`);
-  console.log(`🔔 Push: ${pushConfig ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`🔔 Push: DISABLED`);
   console.log('════════════════════════════════════');
 });
 
