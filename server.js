@@ -10,113 +10,130 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// إعداد Parse Server مع جميع الميزات
+/* ===============================
+   Push Notifications (Firebase FCM)
+   =============================== */
+let pushConfig = undefined;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    pushConfig = {
+      android: {
+        firebaseServiceAccount: JSON.parse(
+          process.env.FIREBASE_SERVICE_ACCOUNT
+        )
+      }
+    };
+    console.log('✅ Firebase FCM Push enabled');
+  } catch (e) {
+    console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON');
+    throw e;
+  }
+} else {
+  console.log('⚠️ Firebase Push disabled (no FIREBASE_SERVICE_ACCOUNT)');
+}
+
+/* ===============================
+   Parse Server Configuration
+   =============================== */
 const parseServer = new ParseServer({
-  // معرّفات التطبيق
+  // App Keys
   appId: process.env.APP_ID || 'myAppId',
   masterKey: process.env.MASTER_KEY || 'myMasterKey',
   clientKey: process.env.CLIENT_KEY || 'myClientKey',
   fileKey: process.env.FILE_KEY || 'myFileKey',
-  
-  // قاعدة البيانات
-  databaseURI: process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
-  
-  // عنوان الخادم
-  serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-  
+  restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
+
+  // Database
+  databaseURI:
+    process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
+
+  // URLs
+  serverURL:
+    process.env.SERVER_URL || 'http://localhost:1337/parse',
+
   // Cloud Code
-  cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
-  
-  // Live Query - تفعيل جميع الفئات
-  liveQuery: {
-    classNames: ['*'], // تفعيل Live Query لجميع الفئات
-    redisURL: process.env.REDIS_URL // اختياري للإنتاج
-  },
-  
-  // الصلاحيات - تفعيل كامل
-  allowClientClassCreation: true, // السماح بإنشاء فئات جديدة من العميل
-  allowCustomObjectId: true, // السماح بـ Object IDs مخصصة
-  
-  // الملفات
+  cloud:
+    process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
+
+  // Files (محلولة مشكلة الصلاحيات)
   filesAdapter: {
     module: '@parse/fs-files-adapter',
     params: {
       filesSubDir: 'files'
     }
   },
-  
-  // الصلاحيات الافتراضية - إعطاء صلاحيات كاملة للجميع
+
+  // Live Query
+  liveQuery: {
+    classNames: ['*'],
+    redisURL: process.env.REDIS_URL
+  },
+
+  // Permissions
+  allowClientClassCreation: true,
+  allowCustomObjectId: true,
+
+  // Limits
   defaultLimit: 100,
   maxLimit: 1000,
-  
-  // REST API
-  restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
-  
-  // Java Key (إن كان مطلوباً)
-  javaKey: process.env.JAVA_KEY || 'myJavaKey',
-  
-  // تسجيل الأخطاء
-  logLevel: process.env.LOG_LEVEL || 'info',
-  
-  // الأمان
-  enforcePrivateUsers: false, // السماح بقراءة بيانات المستخدمين
-  
+
+  // Security
+  enforcePrivateUsers: false,
+
   // GraphQL
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
-  
-  // الإشعارات (اختياري)
-  push: {
-    android: {
-      senderId: process.env.ANDROID_SENDER_ID || '',
-      apiKey: process.env.ANDROID_API_KEY || ''
-    }
-  }
+
+  // Push Notifications (Firebase FCM)
+  push: pushConfig,
+
+  // Logs
+  logLevel: process.env.LOG_LEVEL || 'info'
 });
 
-// ربط Parse على مسار /parse
+// Mount Parse API
 app.use('/parse', parseServer);
 
-// إعداد Dashboard
-const dashboard = new ParseDashboard({
-  apps: [
-    {
-      serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-      appId: process.env.APP_ID || 'myAppId',
-      masterKey: process.env.MASTER_KEY || 'myMasterKey',
-      clientKey: process.env.CLIENT_KEY || 'myClientKey',
-      fileKey: process.env.FILE_KEY || 'myFileKey',
-      restApiKey: process.env.REST_API_KEY || 'myRestApiKey',
-      appName: process.env.APP_NAME || 'MyParseApp'
-    }
-  ],
-  users: [
-    {
-      user: process.env.DASHBOARD_USER || 'admin',
-      pass: process.env.DASHBOARD_PASS || 'admin123'
-    }
-  ],
-  useEncryptedPasswords: false
-}, true);
+/* ===============================
+   Parse Dashboard
+   =============================== */
+const dashboard = new ParseDashboard(
+  {
+    apps: [
+      {
+        serverURL:
+          process.env.SERVER_URL || 'http://localhost:1337/parse',
+        appId: process.env.APP_ID || 'myAppId',
+        masterKey: process.env.MASTER_KEY || 'myMasterKey',
+        clientKey: process.env.CLIENT_KEY || 'myClientKey',
+        fileKey: process.env.FILE_KEY || 'myFileKey',
+        restApiKey: process.env.REST_API_KEY || 'myRestApiKey',
+        appName: process.env.APP_NAME || 'MyParseApp'
+      }
+    ],
+    users: [
+      {
+        user: process.env.DASHBOARD_USER || 'admin',
+        pass: process.env.DASHBOARD_PASS || 'admin123'
+      }
+    ],
+    useEncryptedPasswords: false
+  },
+  true
+);
 
 app.use('/dashboard', dashboard);
 
-// إعداد Live Query Server
+/* ===============================
+   HTTP + Live Query Server
+   =============================== */
 const httpServer = http.createServer(app);
+ParseServer.createLiveQueryServer(httpServer);
 
-// تهيئة Live Query Server
-const parseLiveQueryServer = ParseServer.createLiveQueryServer(httpServer);
-
-// معالج الأخطاء
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
-
-// مسار الصحة
+/* ===============================
+   Health & Info
+   =============================== */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -127,59 +144,47 @@ app.get('/health', (req, res) => {
   });
 });
 
-// مسار معلومات التطبيق
 app.get('/info', (req, res) => {
   res.json({
-    name: 'Parse Server 4.10.4',
+    name: 'Parse Server',
     version: '4.10.4',
-    features: {
-      parseServer: true,
-      dashboard: true,
-      liveQuery: true,
-      cloudCode: true,
-      graphQL: true
-    },
     endpoints: {
       parse: '/parse',
       dashboard: '/dashboard',
       graphql: '/parse/graphql',
-      graphqlPlayground: '/parse/graphql-playground',
       health: '/health'
     }
   });
 });
 
-// بدء السيرفر
+/* ===============================
+   Error Handling
+   =============================== */
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+/* ===============================
+   Start Server
+   =============================== */
 const PORT = process.env.PORT || 1337;
 const HOST = process.env.HOST || '0.0.0.0';
 
 httpServer.listen(PORT, HOST, () => {
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('✅ Parse Server 4.10.4 is running!');
-  console.log('═══════════════════════════════════════════════════════');
-  console.log(`📍 Server URL: ${process.env.SERVER_URL || `http://localhost:${PORT}/parse`}`);
-  console.log(`🎯 Parse API: http://${HOST}:${PORT}/parse`);
-  console.log(`📊 Dashboard: http://${HOST}:${PORT}/dashboard`);
-  console.log(`🔄 Live Query: ws://${HOST}:${PORT}`);
-  console.log(`📈 GraphQL: http://${HOST}:${PORT}/parse/graphql`);
-  console.log(`🎮 GraphQL Playground: http://${HOST}:${PORT}/parse/graphql-playground`);
-  console.log(`💚 Health Check: http://${HOST}:${PORT}/health`);
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('📝 Dashboard Credentials:');
-  console.log(`   Username: ${process.env.DASHBOARD_USER || 'admin'}`);
-  console.log(`   Password: ${process.env.DASHBOARD_PASS || 'admin123'}`);
-  console.log('═══════════════════════════════════════════════════════');
-  console.log('🔑 API Keys:');
-  console.log(`   App ID: ${process.env.APP_ID || 'myAppId'}`);
-  console.log(`   Master Key: ${process.env.MASTER_KEY || 'myMasterKey'}`);
-  console.log(`   Client Key: ${process.env.CLIENT_KEY || 'myClientKey'}`);
-  console.log(`   REST API Key: ${process.env.REST_API_KEY || 'myRestApiKey'}`);
-  console.log('═══════════════════════════════════════════════════════');
+  console.log('════════════════════════════════════');
+  console.log('✅ Parse Server 4.10.4 Running');
+  console.log(`📍 ${process.env.SERVER_URL || `http://${HOST}:${PORT}/parse`}`);
+  console.log(`📊 Dashboard: /dashboard`);
+  console.log(`🔔 Push: ${pushConfig ? 'ENABLED' : 'DISABLED'}`);
+  console.log('════════════════════════════════════');
 });
 
-// معالجة الأخطاء غير المعالجة
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+/* ===============================
+   Process Safety
+   =============================== */
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
 });
 
 process.on('uncaughtException', (error) => {
