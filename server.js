@@ -17,16 +17,20 @@ let pushConfig = undefined;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
+    // فك ترميز Base64 لمتغير البيئة وتحويله إلى JSON
+    const firebaseServiceAccountJSON = Buffer.from(
+      process.env.FIREBASE_SERVICE_ACCOUNT,
+      'base64'
+    ).toString('utf8');
+
     pushConfig = {
       android: {
-        firebaseServiceAccount: JSON.parse(
-          process.env.FIREBASE_SERVICE_ACCOUNT
-        )
+        firebaseServiceAccount: JSON.parse(firebaseServiceAccountJSON)
       }
     };
     console.log('✅ Firebase FCM Push enabled');
   } catch (e) {
-    console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON');
+    console.error('❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON or Base64');
     throw e;
   }
 } else {
@@ -45,23 +49,18 @@ const parseServer = new ParseServer({
   restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
 
   // Database
-  databaseURI:
-    process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
+  databaseURI: process.env.DATABASE_URI || 'mongodb://localhost:27017/dev',
 
   // URLs
-  serverURL:
-    process.env.SERVER_URL || 'http://localhost:1337/parse',
+  serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
 
   // Cloud Code
-  cloud:
-    process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
+  cloud: process.env.CLOUD_MAIN || path.join(__dirname, 'cloud/main.js'),
 
-  // Files (محلولة مشكلة الصلاحيات)
+  // Files
   filesAdapter: {
     module: '@parse/fs-files-adapter',
-    params: {
-      filesSubDir: 'files'
-    }
+    params: { filesSubDir: 'files' }
   },
 
   // Live Query
@@ -102,8 +101,7 @@ const dashboard = new ParseDashboard(
   {
     apps: [
       {
-        serverURL:
-          process.env.SERVER_URL || 'http://localhost:1337/parse',
+        serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
         appId: process.env.APP_ID || 'myAppId',
         masterKey: process.env.MASTER_KEY || 'myMasterKey',
         clientKey: process.env.CLIENT_KEY || 'myClientKey',
