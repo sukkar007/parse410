@@ -2,7 +2,7 @@
 // Parse Cloud Code - Advanced Examples
 // ==========================================
 
-import OneSignal from '@onesignal/node-onesignal';
+const OneSignal = require('@onesignal/node-onesignal');
 
 // OneSignal config
 const app_id = "7dec5bab-5550-4977-af9d-563e58d64721";
