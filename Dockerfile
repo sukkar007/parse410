@@ -6,7 +6,6 @@ WORKDIR /parse-server
 
 COPY package.json ./
 
-# الحل هنا 👇
 RUN npm install --legacy-peer-deps --ignore-scripts
 
 COPY server.js ./
@@ -15,7 +14,9 @@ COPY bin bin
 COPY public_html public_html
 COPY views views
 
-RUN mkdir -p logs && chown -R node: logs
+# 👇 الحل الحقيقي هنا
+RUN mkdir -p files logs \
+    && chown -R node:node /parse-server
 
 ENV PORT=1337
 ENV NODE_ENV=production
