@@ -61,8 +61,7 @@
     "winston": "3.3.3",
     "winston-daily-rotate-file": "4.5.0",
     "ws": "7.5.3",
-    "parse-dashboard": "^4.1.4",
-    "backblaze-b2": "^1.1.0"
+    "parse-dashboard": "^4.1.4"
   },
   "devDependencies": {
     "@babel/cli": "7.14.8",
