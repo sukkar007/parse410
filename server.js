@@ -34,22 +34,20 @@ const parseServer = new ParseServer({
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* =============================== Backblaze B2 (S3 Adapter) =============================== */
+  /* =============================== Backblaze B2 (S3 Adapter الصحيح) =============================== */
   filesAdapter: new (require('@parse/s3-files-adapter'))({
     bucket: 'flamingo',
 
-    // ⚠️ endpoint فقط – بدون region نهائيًا
+    // Backblaze B2 S3 Endpoint
     endpoint: 'https://s3.us-east-005.backblazeb2.com',
 
-    // Application Key الصحيح
-    accessKey: '0053ff2cfbeee040000000001',
-    secretKey: 'K005fqNn6BDH8is4Eh3ss9mzWTtdh2Y',
+    // Application Key (وليس Master Key)
+    accessKey: '0053ff2cfbeee040000000002',
+    secretKey: 'K0050lXpE66h4H/3xwQ7G8Pendaf7FA',
 
-    // إعدادات إلزامية لـ Backblaze
+    signatureVersion: 'v4',
     s3ForcePathStyle: true,
     s3BucketEndpoint: false,
-    signatureVersion: 'v4',
-
     directAccess: true
   }),
 
@@ -68,7 +66,7 @@ const parseServer = new ParseServer({
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
 
-  logLevel: process.env.LOG_LEVEL || 'info'
+  logLevel: 'info'
 });
 
 /* =============================== Mount Parse API =============================== */
