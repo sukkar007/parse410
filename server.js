@@ -49,11 +49,11 @@ async function startServer() {
 
     cloud: path.join(__dirname, 'cloud/main.js'),
 
-    /* ✅ التخزين الصحيح على Render */
+    /* ✅ MongoDB adapter الصحيح لـ Parse Server 4.x */
     filesAdapter: {
-      module: 'parse-server/lib/Adapters/Files/GridFSAdapter',
+      module: 'parse-server/lib/Adapters/Files/MongoGridStoreAdapter',
       options: {
-        databaseURI: process.env.DATABASE_URI
+        uri: process.env.DATABASE_URI
       }
     },
 
@@ -75,7 +75,7 @@ async function startServer() {
     logLevel: process.env.LOG_LEVEL || 'info'
   });
 
-  /* 🔴 السطر الأهم – بدونه يظهر خطأ filesController */
+  /* 🔴 مهم جدًا – يمنع خطأ filesController */
   await parseServer.start();
 
   /* ===============================
@@ -146,10 +146,10 @@ async function startServer() {
   const PORT = process.env.PORT || 1337;
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('════════════════════════════════════');
-    console.log('✅ Parse Server Running');
+    console.log('✅ Parse Server 4.x Running');
     console.log(`📍 ${process.env.SERVER_URL}`);
     console.log('📊 Dashboard: /dashboard');
-    console.log('📁 Files: GridFS (MongoDB)');
+    console.log('📁 Files: MongoGridStore (MongoDB)');
     console.log('════════════════════════════════════');
   });
 }
