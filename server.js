@@ -9,7 +9,7 @@ const ParseDashboard = require('parse-dashboard');
 
 const app = express();
 
-/* =============================== Trust Proxy (مهم جدًا لـ Render) =============================== */
+/* =============================== Trust Proxy =============================== */
 app.set('trust proxy', 1);
 
 /* =============================== Middlewares =============================== */
@@ -34,15 +34,16 @@ const parseServer = new ParseServer({
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* =============================== Backblaze B2 (S3 Adapter) =============================== */
+  /* =============================== Backblaze B2 (S3 Adapter ثابت) =============================== */
   filesAdapter: new (require('@parse/s3-files-adapter'))({
-    bucket: 'flamingo', // اسم الدلو ثابت
+    bucket: 'flamingo',                               // اسم الدلو
+    region: 'us-east-005',                             // المنطقة
     endpoint: 'https://s3.us-east-005.backblazeb2.com', // endpoint كامل
-    accessKey: '3ff2cfbeee04',
-    secretKey: '0056df25d7c68fa161924cd7efb24a9cccb3433c74',
+    accessKey: '0053ff2cfbeee040000000001',           // keyID الجديد
+    secretKey: 'K005fqNn6BDH8is4Eh3ss9mzWTtdh2Y',    // applicationKey الجديد
     directAccess: true,
     signatureVersion: 'v4',
-    s3ForcePathStyle: true // مهم مع Backblaze
+    s3ForcePathStyle: true
   }),
 
   /* =============================== LiveQuery =============================== */
