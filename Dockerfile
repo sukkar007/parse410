@@ -8,8 +8,8 @@ WORKDIR /parse-server
 # نسخ package.json فقط أولاً لتسريع build
 COPY package.json ./
 
-# تثبيت الحزم مع تخطي peer dependencies scripts
-RUN npm install --legacy-peer-deps --ignore-scripts
+# ✅ تثبيت الحزم بدون optional dependencies (حل مشكلة B2)
+RUN npm install --legacy-peer-deps --ignore-scripts --no-optional
 
 # نسخ باقي الملفات
 COPY server.js ./
