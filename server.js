@@ -5,8 +5,7 @@ const path = require('path');
 const http = require('http');
 const B2 = require('backblaze-b2'); // npm i backblaze-b2
 
-const __dirname = path.resolve();
-const app = express();
+const app = express(); // __dirname لا تحتاج لتعريفه
 
 // Trust Proxy
 app.set('trust proxy', 1);
