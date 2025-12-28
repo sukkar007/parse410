@@ -1,13 +1,15 @@
-const express = require('express');
-const { ParseServer } = require('parse-server');
-const ParseDashboard = require('parse-dashboard');
-const http = require('http');
-const path = require('path');
+import express from 'express';
+import { ParseServer } from 'parse-server';
+import ParseDashboard from 'parse-dashboard';
+import path from 'path';
+import http from 'http';
+import B2Adapter from '@parse/b2-files-adapter'; // npm i @parse/b2-files-adapter
 
+const __dirname = path.resolve();
 const app = express();
 
 /* ===============================
-   Trust Proxy (مهم جدًا لـ Render)
+   Trust Proxy
    =============================== */
 app.set('trust proxy', 1);
 
@@ -18,102 +20,64 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===============================
-   Static Files لموقعك فقط
+   Static Files
    =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
 /* ===============================
-   Firebase Push (معطّل)
+   Backblaze B2 Files Adapter
    =============================== */
-let pushConfig = undefined;
-console.log('⚠️ Firebase Push disabled');
+const filesAdapter = new B2Adapter({
+  applicationKeyId: '3ff2cfbeee04',       // KeyID
+  applicationKey: '005ab4454c98830468aa3cb458c870d1bf036f4a3e', // Application Key
+  bucketName: 'flamingo',                  // اسم الحاوية
+  directAccess: true                        // true = روابط مباشرة للمستخدمين
+});
 
 /* ===============================
-   Start Server (ASYNC – مهم جدًا)
+   Start Server
    =============================== */
 async function startServer() {
-  /* ===============================
-     Parse Server Configuration
-     =============================== */
   const parseServer = new ParseServer({
-    appId: process.env.APP_ID,
-    masterKey: process.env.MASTER_KEY,
-    clientKey: process.env.CLIENT_KEY,
-    fileKey: process.env.FILE_KEY,
-    restAPIKey: process.env.REST_API_KEY,
+    appId: process.env.APP_ID || 'myAppId',
+    masterKey: process.env.MASTER_KEY || 'myMasterKey',
+    clientKey: process.env.CLIENT_KEY || 'myClientKey',
+    restAPIKey: process.env.REST_API_KEY || 'myRestApiKey',
 
-    databaseURI: process.env.DATABASE_URI,
+    databaseURI: process.env.DATABASE_URI,  // MongoDB Atlas
 
-    serverURL: process.env.SERVER_URL,        // HTTPS
-    publicServerURL: process.env.SERVER_URL, // Dashboard
-
+    serverURL: process.env.SERVER_URL,      // https://domain/parse
+    publicServerURL: process.env.SERVER_URL,
     cloud: path.join(__dirname, 'cloud/main.js'),
 
-    /* ✅ MongoDB adapter الصحيح لـ Parse Server 4.x */
-    filesAdapter: {
-      module: 'parse-server/lib/Adapters/Files/MongoGridStoreAdapter',
-      options: {
-        uri: process.env.DATABASE_URI
-      }
-    },
+    filesAdapter: filesAdapter,
 
-    liveQuery: {
-      classNames: ['*'],
-      redisURL: process.env.REDIS_URL
-    },
-
+    liveQuery: { classNames: ['*'] },
     allowClientClassCreation: true,
     allowCustomObjectId: true,
-
     defaultLimit: 100,
     maxLimit: 1000,
-
-    graphQLPath: '/graphql',
-    graphQLPlaygroundPath: '/graphql-playground',
-
-    push: pushConfig,
-    logLevel: process.env.LOG_LEVEL || 'info'
+    logLevel: 'info'
   });
 
-  /* 🔴 مهم جدًا – يمنع خطأ filesController */
   await parseServer.start();
-
-  /* ===============================
-     Mount Parse API
-     =============================== */
   app.use('/parse', parseServer.app);
 
   /* ===============================
      Parse Dashboard
      =============================== */
-  app.use(
-    '/dashboard',
-    express.static(
-      path.join(__dirname, 'node_modules/parse-dashboard/public')
-    )
-  );
-
-  const dashboard = new ParseDashboard(
-    {
-      apps: [
-        {
-          serverURL: process.env.SERVER_URL,
-          appId: process.env.APP_ID,
-          masterKey: process.env.MASTER_KEY,
-          appName: process.env.APP_NAME || 'MyParseApp'
-        }
-      ],
-      users: [
-        {
-          user: process.env.DASHBOARD_USER,
-          pass: process.env.DASHBOARD_PASS
-        }
-      ]
-    },
-    {
-      allowInsecureHTTP: false
-    }
-  );
+  const dashboard = new ParseDashboard({
+    apps: [{
+      serverURL: process.env.SERVER_URL,
+      appId: process.env.APP_ID || 'myAppId',
+      masterKey: process.env.MASTER_KEY || 'myMasterKey',
+      appName: 'Flamingo Parse App'
+    }],
+    users: [{
+      user: process.env.DASHBOARD_USER || 'admin',
+      pass: process.env.DASHBOARD_PASS || 'admin123'
+    }]
+  }, { allowInsecureHTTP: true });
 
   app.use('/dashboard', dashboard);
 
@@ -121,10 +85,7 @@ async function startServer() {
      Health Check
      =============================== */
   app.get('/health', (req, res) => {
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString()
-    });
+    res.json({ status: 'ok' });
   });
 
   /* ===============================
@@ -132,13 +93,11 @@ async function startServer() {
      =============================== */
   app.use((err, req, res, next) => {
     console.error('Error:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
+    if (!res.headersSent) res.status(500).json({ error: 'Internal Server Error' });
   });
 
   /* ===============================
-     HTTP + LiveQuery Server
+     HTTP + LiveQuery
      =============================== */
   const httpServer = http.createServer(app);
   ParseServer.createLiveQueryServer(httpServer);
@@ -146,10 +105,10 @@ async function startServer() {
   const PORT = process.env.PORT || 1337;
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('════════════════════════════════════');
-    console.log('✅ Parse Server 4.x Running');
+    console.log('✅ Parse Server Running');
     console.log(`📍 ${process.env.SERVER_URL}`);
     console.log('📊 Dashboard: /dashboard');
-    console.log('📁 Files: MongoGridStore (MongoDB)');
+    console.log('📁 Files: Backblaze B2 (Direct Access)');
     console.log('════════════════════════════════════');
   });
 }
@@ -157,7 +116,7 @@ async function startServer() {
 /* ===============================
    Boot
    =============================== */
-startServer().catch((err) => {
+startServer().catch(err => {
   console.error('❌ Failed to start server:', err);
   process.exit(1);
 });
@@ -165,13 +124,7 @@ startServer().catch((err) => {
 /* ===============================
    Process Safety
    =============================== */
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
-});
+process.on('unhandledRejection', reason => console.error('Unhandled Rejection:', reason));
+process.on('uncaughtException', error => { console.error('Uncaught Exception:', error); process.exit(1); });
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
-});
-
-module.exports = app;
+export default app;
