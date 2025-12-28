@@ -34,20 +34,30 @@ const parseServer = new ParseServer({
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* =============================== Backblaze B2 (S3 Adapter ثابت) =============================== */
+  /* =============================== Backblaze B2 (S3 Adapter) =============================== */
   filesAdapter: new (require('@parse/s3-files-adapter'))({
-    bucket: 'flamingo',                               // اسم الدلو
-    region: 'us-east-005',                             // المنطقة
-    endpoint: 'https://s3.us-east-005.backblazeb2.com', // endpoint كامل
-    accessKey: '0053ff2cfbeee040000000001',           // keyID الجديد
-    secretKey: 'K005fqNn6BDH8is4Eh3ss9mzWTtdh2Y',    // applicationKey الجديد
-    directAccess: true,
+    bucket: 'flamingo',
+
+    // ⚠️ endpoint فقط – بدون region نهائيًا
+    endpoint: 'https://s3.us-east-005.backblazeb2.com',
+
+    // Application Key الصحيح
+    accessKey: '0053ff2cfbeee040000000001',
+    secretKey: 'K005fqNn6BDH8is4Eh3ss9mzWTtdh2Y',
+
+    // إعدادات إلزامية لـ Backblaze
+    s3ForcePathStyle: true,
+    s3BucketEndpoint: false,
     signatureVersion: 'v4',
-    s3ForcePathStyle: true
+
+    directAccess: true
   }),
 
   /* =============================== LiveQuery =============================== */
-  liveQuery: { classNames: ['*'], redisURL: process.env.REDIS_URL },
+  liveQuery: {
+    classNames: ['*'],
+    redisURL: process.env.REDIS_URL
+  },
 
   allowClientClassCreation: true,
   allowCustomObjectId: true,
@@ -67,7 +77,9 @@ app.use('/parse', parseServer);
 /* =============================== Parse Dashboard =============================== */
 app.use(
   '/dashboard',
-  express.static(path.join(__dirname, 'node_modules/parse-dashboard/public'))
+  express.static(
+    path.join(__dirname, 'node_modules/parse-dashboard/public')
+  )
 );
 
 const dashboard = new ParseDashboard(
@@ -81,7 +93,10 @@ const dashboard = new ParseDashboard(
       }
     ],
     users: [
-      { user: process.env.DASHBOARD_USER, pass: process.env.DASHBOARD_PASS }
+      {
+        user: process.env.DASHBOARD_USER,
+        pass: process.env.DASHBOARD_PASS
+      }
     ]
   },
   { allowInsecureHTTP: false }
@@ -95,7 +110,10 @@ ParseServer.createLiveQueryServer(httpServer);
 
 /* =============================== Health Check =============================== */
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString()
+  });
 });
 
 /* =============================== Error Handling =============================== */
