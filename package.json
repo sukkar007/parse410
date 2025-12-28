@@ -23,7 +23,7 @@
     "@apollographql/graphql-playground-html": "1.6.26",
     "@graphql-tools/links": "6.2.5",
     "@graphql-tools/stitch": "6.2.4",
-    "@parse/b2-files-adapter": "https://github.com/parse-community/parse-server-b2-files-adapter/archive/refs/heads/main.zip",
+    "@parse/b2-files-adapter": "github:parse-community/parse-server-b2-files-adapter",
     "@graphql-tools/utils": "6.2.4",
     "@parse/fs-files-adapter": "1.2.0",
     "@parse/push-adapter": "3.4.1",
