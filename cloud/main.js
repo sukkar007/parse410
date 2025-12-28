@@ -1,5 +1,5 @@
 // ==========================================
-// Parse Cloud Code - Advanced Examples
+// Parse Cloud Code - Main Application
 // ==========================================
 
 const OneSignal = require('@onesignal/node-onesignal');
@@ -18,175 +18,275 @@ const configuration = OneSignal.createConfiguration({
 const client = new OneSignal.DefaultApi(configuration);
 
 //////////////////////////////////////////////////////////
-// =================== مساعدة - إصلاح مسارات الصور ===================
+// =================== دوال المساعدة ===================
 //////////////////////////////////////////////////////////
 
 /**
- * استخراج رابط الصورة من بيانات Parse File
+ * استخراج رابط الصورة من بيانات Parse File - محسنة
  */
 function getImageUrl(avatarData) {
-    if (!avatarData) return '';
+    console.log("🔍 getImageUrl called with:", typeof avatarData, avatarData);
     
-    // إذا كان avatarData هو object يحتوي على url
-    if (typeof avatarData === 'object' && avatarData.url) {
-        return avatarData.url;
+    if (!avatarData) {
+        console.log("❌ No avatar data provided");
+        return '';
     }
     
-    // إذا كان avatarData هو string
+    // 1. إذا كان object يحتوي على url
+    if (typeof avatarData === 'object' && avatarData !== null) {
+        console.log("📦 Avatar is object:", avatarData);
+        
+        // إذا كان Parse File object
+        if (avatarData.url) {
+            console.log("✅ Found URL in object:", avatarData.url);
+            return avatarData.url;
+        }
+        
+        // إذا كان يحتوي على _url
+        if (avatarData._url) {
+            console.log("✅ Found _url in object:", avatarData._url);
+            return avatarData._url;
+        }
+        
+        // تحويل الكائن إلى JSON واستخراج URL
+        try {
+            const jsonStr = JSON.stringify(avatarData);
+            console.log("🔄 Object JSON string:", jsonStr);
+            
+            if (jsonStr.includes('"url":')) {
+                const urlMatch = jsonStr.match(/"url"\s*:\s*"([^"]+)"/);
+                if (urlMatch && urlMatch[1]) {
+                    console.log("✅ Extracted URL from object JSON:", urlMatch[1]);
+                    return urlMatch[1];
+                }
+            }
+        } catch (e) {
+            console.error("❌ Error processing object:", e);
+        }
+    }
+    
+    // 2. إذا كان string
     if (typeof avatarData === 'string') {
-        // تحقق إذا كان يحتوي على http
+        console.log("📝 Avatar is string:", avatarData);
+        
+        // إذا كان URL مباشر
         if (avatarData.startsWith('http://') || avatarData.startsWith('https://')) {
+            console.log("✅ Direct URL:", avatarData);
             return avatarData;
         }
         
         // إذا كان يحتوي على File object كـ JSON
         try {
-            const parsed = JSON.parse(avatarData);
+            // تنظيف السلسلة لتحليل JSON
+            let cleanStr = avatarData;
+            
+            // استبدال الاقتباسات المفردة بمزدوجة للتحليل الصحيح
+            if (avatarData.includes("'") && !avatarData.includes('"')) {
+                cleanStr = avatarData.replace(/'/g, '"');
+            }
+            
+            // إزالة backslashes
+            cleanStr = cleanStr.replace(/\\/g, '');
+            
+            console.log("🔄 Cleaned string for JSON parsing:", cleanStr);
+            
+            const parsed = JSON.parse(cleanStr);
+            console.log("✅ Parsed JSON:", parsed);
+            
             if (parsed && parsed.url) {
+                console.log("✅ Found URL in parsed JSON:", parsed.url);
                 return parsed.url;
             }
+            
+            if (parsed && parsed._url) {
+                console.log("✅ Found _url in parsed JSON:", parsed._url);
+                return parsed._url;
+            }
         } catch (e) {
-            // ليس JSON، عوده كما هو
-            return avatarData;
+            console.log("⚠️ Not valid JSON, trying regex extraction");
+            
+            // محاولة استخراج URL باستخدام regex
+            const urlRegex = /(https?:\/\/[^\s"']+)/;
+            const match = avatarData.match(urlRegex);
+            if (match && match[1]) {
+                console.log("✅ Extracted URL with regex:", match[1]);
+                return match[1];
+            }
+            
+            // إذا كان يحتوي على name فقط، بناء الرابط
+            if (avatarData.includes('_avatar') || avatarData.includes('.jpg') || avatarData.includes('.png')) {
+                const url = `https://parse410.onrender.com/parse/files/myAppId/${avatarData}`;
+                console.log("🔗 Built URL from filename:", url);
+                return url;
+            }
         }
     }
     
+    console.log("❌ Could not extract image URL");
     return '';
 }
 
 /**
- * استخراج اسم المستخدم من بيانات المستخدم
+ * استخراج اسم المستخدم من بيانات المستخدم - محسنة
  */
 function getNickname(user) {
-    if (user.get('name')) {
-        return user.get('name');
-    }
+    if (!user) return 'Unknown User';
     
-    if (user.get('username')) {
-        return user.get('username');
-    }
+    console.log("👤 getNickname called for user:", user.id);
     
-    if (user.get('first_name')) {
-        const firstName = user.get('first_name');
+    // أولاً: التحقق من first_name (ولكن ليس إذا كانت objectId)
+    const firstName = user.get('first_name');
+    if (firstName && firstName !== user.id && firstName !== user.get('username')) {
         const lastName = user.get('last_name') || '';
-        return firstName + (lastName ? ' ' + lastName : '');
+        const name = firstName + (lastName ? ' ' + lastName : '');
+        console.log("✅ Using first_name + last_name:", name);
+        return name;
     }
     
-    return `User_${user.id.substring(0, 6)}`;
+    // ثانياً: username
+    const username = user.get('username');
+    if (username) {
+        console.log("✅ Using username:", username);
+        return username;
+    }
+    
+    // ثالثاً: name
+    const name = user.get('name');
+    if (name) {
+        console.log("✅ Using name field:", name);
+        return name;
+    }
+    
+    // رابعاً: objectId مختصر
+    const shortId = user.id.substring(0, 6);
+    console.log("✅ Using objectId (short):", `User_${shortId}`);
+    return `User_${shortId}`;
 }
 
 //////////////////////////////////////////////////////////
-// Send Push Notification
+// =================== دوال التطبيق الرئيسية ===================
 //////////////////////////////////////////////////////////
-Parse.Cloud.define('sendPush', async (request) => {
-    var userQuery = new Parse.Query(Parse.User);
-    
-    if(request.params.type == "live"){
-        userQuery.containedIn("objectId", request.params.followers);
-    } else {
-        userQuery.equalTo("objectId", request.params.receiverId);
-    }
 
-    var pushQuery = new Parse.Query(Parse.Installation);
-    pushQuery.matchesQuery('user', userQuery);
+// 1. إرسال إشعار Push
+Parse.Cloud.define('sendPush', async (request) => {
+    const { type, receiverId, followers, title, alert, avatar, big_picture, view, senderId, senderName, chat, objectId } = request.params;
+    
+    let userQuery = new Parse.Query(Parse.User);
+    
+    if (type == "live") {
+        userQuery.containedIn("objectId", followers);
+    } else {
+        userQuery.equalTo("objectId", receiverId);
+    }
 
     const notification = new OneSignal.Notification();
     notification.app_id = app_id;
-    notification.headings = { en: request.params.title};  
-    notification.contents = { en: request.params.alert};
-    notification.large_icon = request.params.avatar;
-    notification.big_picture = request.params.big_picture;
+    notification.headings = { en: title };  
+    notification.contents = { en: alert };
+    notification.large_icon = avatar;
+    notification.big_picture = big_picture;
     notification.target_channel = "Push";
     notification.include_aliases = {
-        external_id: [request.params.receiverId]
+        external_id: [receiverId]
     };  
     notification.data = {
-        view: request.params.view,
-        alert: request.params.alert,
-        senderId: request.params.senderId,
-        senderName: request.params.senderName,
-        type: request.params.type,
-        chat: request.params.chat,
-        avatar: request.params.avatar,
-        objectId: request.params.objectId,
-    };  
+        view: view,
+        alert: alert,
+        senderId: senderId,
+        senderName: senderName,
+        type: type,
+        chat: chat,
+        avatar: avatar,
+        objectId: objectId,
+    };
 
-    return client.createNotification(notification)
-        .then(function () {
-            console.log("Push successfully");
-            return "sent";
-        }, function (error) {
-            console.log("Push Got an error " + error.code + " : " + error.message);
-            return Promise.reject(error);
-        });
+    try {
+        const response = await client.createNotification(notification);
+        console.log("✅ Push notification sent successfully");
+        return "sent";
+    } catch (error) {
+        console.error("❌ Push notification error:", error);
+        throw new Parse.Error(Parse.Error.SCRIPT_FAILED, `Push failed: ${error.message}`);
+    }
 });
 
-//////////////////////////////////////////////////////////
-// Update Password
-//////////////////////////////////////////////////////////
+// 2. تحديث كلمة المرور
 Parse.Cloud.define("updatePassword", async (request) => {
     const { username, password } = request.params;
+
+    if (!username || !password) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "Username and password are required");
+    }
 
     const userQuery = new Parse.Query(Parse.User);
     userQuery.equalTo("username", username);
 
     const user = await userQuery.first({ useMasterKey: true });
-    if (!user) throw "User not found";
+    if (!user) throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "User not found");
 
     user.set("password", password);
     user.set("secondary_password", password);
     await user.save(null, { useMasterKey: true });
 
-    return "updated";
+    return "Password updated successfully";
 });
 
-//////////////////////////////////////////////////////////
-// Send Gift
-//////////////////////////////////////////////////////////
+// 3. إرسال هدية
 Parse.Cloud.define("send_gift", async (request) => {
     const { objectId, credits } = request.params;
 
-    const user = await new Parse.Query(Parse.User).get(objectId, { useMasterKey: true });
+    if (!objectId || !credits) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "User ID and credits are required");
+    }
 
-    user.increment("diamonds", credits);
-    user.increment("diamondsTotal", credits);
+    const user = await new Parse.Query(Parse.User).get(objectId, { useMasterKey: true });
+    if (!user) throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "User not found");
+
+    user.increment("diamonds", parseInt(credits));
+    user.increment("diamondsTotal", parseInt(credits));
 
     await user.save(null, { useMasterKey: true });
-    return "updated";
+    return "Gift sent successfully";
 });
 
-//////////////////////////////////////////////////////////
-// Send Agency Gift
-//////////////////////////////////////////////////////////
+// 4. إرسال هدية الوكالة
 Parse.Cloud.define("send_agency", async (request) => {
     const { objectId, credits } = request.params;
 
-    const user = await new Parse.Query(Parse.User).get(objectId, { useMasterKey: true });
+    if (!objectId || !credits) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "User ID and credits are required");
+    }
 
-    user.increment("diamondsAgency", credits);
-    user.increment("diamondsAgencyTotal", credits);
+    const user = await new Parse.Query(Parse.User).get(objectId, { useMasterKey: true });
+    if (!user) throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "User not found");
+
+    user.increment("diamondsAgency", parseInt(credits));
+    user.increment("diamondsAgencyTotal", parseInt(credits));
 
     await user.save(null, { useMasterKey: true });
-    return "updated";
+    return "Agency gift sent successfully";
 });
 
-//////////////////////////////////////////////////////////
-// Check phone number
-//////////////////////////////////////////////////////////
+// 5. التحقق من رقم الهاتف
 Parse.Cloud.define("check_phone_number", async (request) => {
     const phone = request.params.phone_number;
+
+    if (!phone) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "Phone number is required");
+    }
 
     const user = await new Parse.Query(Parse.User)
         .equalTo("phone_number_full", phone)
         .first({ useMasterKey: true });
 
-    if (user) throw new Parse.Error(100, "Phone exists");
-    return "ok";
+    if (user) {
+        throw new Parse.Error(Parse.Error.DUPLICATE_VALUE, "Phone number already exists");
+    }
+    
+    return "Phone number is available";
 });
 
-//////////////////////////////////////////////////////////
-// Restart PK Battle
-//////////////////////////////////////////////////////////
+// 6. إعادة تشغيل معركة PK
 Parse.Cloud.define("restartPkBattle", async (request) => {
     const { liveChannel, times } = request.params;
 
@@ -196,18 +296,17 @@ Parse.Cloud.define("restartPkBattle", async (request) => {
         .equalTo("battle_status", "battle_alive")
         .first();
 
-    if (!live) throw "Streaming not found";
+    if (!live) throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "Streaming not found");
 
     live.set("his_points", 0);
     live.set("my_points", 0);
-    live.set("repeat_battle_times", times);
+    live.set("repeat_battle_times", parseInt(times) || 0);
 
     await live.save();
+    return "PK battle restarted";
 });
 
-//////////////////////////////////////////////////////////
-// Save his battle points
-//////////////////////////////////////////////////////////
+// 7. حفظ نقاط المعركة
 Parse.Cloud.define("save_hisBattle_points", async (request) => {
     const { points, liveChannel } = request.params;
 
@@ -217,20 +316,32 @@ Parse.Cloud.define("save_hisBattle_points", async (request) => {
         .equalTo("battle_status", "battle_alive")
         .first();
 
-    if (!live) throw "Streaming not found";
+    if (!live) throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "Streaming not found");
 
-    live.set("his_points", points);
+    live.set("his_points", parseInt(points) || 0);
     await live.save();
+    
+    return "Battle points saved";
 });
 
-//////////////////////////////////////////////////////////
-// Follow user
-//////////////////////////////////////////////////////////
+// 8. متابعة مستخدم
 Parse.Cloud.define("follow_user", async (request) => {
     const { authorId, receiverId } = request.params;
 
+    if (!authorId || !receiverId) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "Both user IDs are required");
+    }
+
+    if (authorId === receiverId) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "Cannot follow yourself");
+    }
+
     const author = await new Parse.Query(Parse.User).get(authorId, { useMasterKey: true });
     const receiver = await new Parse.Query(Parse.User).get(receiverId, { useMasterKey: true });
+
+    if (!author || !receiver) {
+        throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "User not found");
+    }
 
     author.addUnique("following", receiverId);
     receiver.addUnique("followers", authorId);
@@ -238,17 +349,28 @@ Parse.Cloud.define("follow_user", async (request) => {
     await author.save(null, { useMasterKey: true });
     await receiver.save(null, { useMasterKey: true });
 
-    return author;
+    return {
+        success: true,
+        message: "Followed successfully",
+        authorId: authorId,
+        receiverId: receiverId
+    };
 });
 
-//////////////////////////////////////////////////////////
-// Unfollow user
-//////////////////////////////////////////////////////////
+// 9. إلغاء متابعة مستخدم
 Parse.Cloud.define("unfollow_user", async (request) => {
     const { authorId, receiverId } = request.params;
 
+    if (!authorId || !receiverId) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "Both user IDs are required");
+    }
+
     const author = await new Parse.Query(Parse.User).get(authorId, { useMasterKey: true });
     const receiver = await new Parse.Query(Parse.User).get(receiverId, { useMasterKey: true });
+
+    if (!author || !receiver) {
+        throw new Parse.Error(Parse.Error.OBJECT_NOT_FOUND, "User not found");
+    }
 
     author.remove("following", receiverId);
     receiver.remove("followers", authorId);
@@ -256,12 +378,15 @@ Parse.Cloud.define("unfollow_user", async (request) => {
     await author.save(null, { useMasterKey: true });
     await receiver.save(null, { useMasterKey: true });
 
-    return author;
+    return {
+        success: true,
+        message: "Unfollowed successfully",
+        authorId: authorId,
+        receiverId: receiverId
+    };
 });
 
-//////////////////////////////////////////////////////////
-// RevenueCat verify + add coins
-//////////////////////////////////////////////////////////
+// 10. التحقق من RevenueCat وإضافة العملات
 Parse.Cloud.define("verifyAndAddCoins", async (request) => {
     const { userId, productId, transactionId, purchaseDate } = request.params;
 
@@ -270,54 +395,84 @@ Parse.Cloud.define("verifyAndAddCoins", async (request) => {
         throw new Parse.Error(209, "Unauthorized");
     }
 
+    if (!REVENUECAT_API_KEY) {
+        throw new Parse.Error(Parse.Error.SCRIPT_FAILED, "RevenueCat API key not configured");
+    }
+
     const PaymentsModel = Parse.Object.extend("PaymentsModel");
 
+    // التحقق من عدم تكرار المعاملة
     const exists = await new Parse.Query(PaymentsModel)
         .equalTo("transactionId", transactionId)
         .first({ useMasterKey: true });
 
     if (exists) throw new Parse.Error(141, "Duplicate transaction");
 
+    // التحقق مع RevenueCat
     const url = `https://api.revenuecat.com/v1/subscribers/${userId}`;
     const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${REVENUECAT_API_KEY}` }
+        headers: { 
+            Authorization: `Bearer ${REVENUECAT_API_KEY}`,
+            'Content-Type': 'application/json'
+        }
     });
 
-    if (!res.ok) throw new Parse.Error(141, "RevenueCat error");
+    if (!res.ok) {
+        console.error("RevenueCat API error:", res.status, res.statusText);
+        throw new Parse.Error(141, `RevenueCat error: ${res.status}`);
+    }
 
     const data = await res.json();
+    console.log("RevenueCat response:", JSON.stringify(data).substring(0, 500));
 
     const transactions = data.subscriber?.non_subscriptions?.[productId] || [];
     const verifiedTx = transactions.find(tx => tx.id === transactionId);
 
-    if (!verifiedTx) throw new Parse.Error(141, "Invalid transaction");
+    if (!verifiedTx) {
+        console.error("Transaction not found in RevenueCat:", transactionId);
+        throw new Parse.Error(141, "Invalid transaction");
+    }
 
+    // استخراج عدد العملات من productId
     const match = productId.match(/flamingo\.(\d+)\.credits/);
     if (!match) throw new Parse.Error(141, "Invalid product format");
 
     const coins = parseInt(match[1], 10);
+    if (isNaN(coins) || coins <= 0) {
+        throw new Parse.Error(141, "Invalid coins amount");
+    }
 
-    user.set("credit", (user.get("credit") || 0) + coins);
+    // إضافة العملات للمستخدم
+    const currentCredits = user.get("credit") || 0;
+    user.set("credit", currentCredits + coins);
     await user.save(null, { useMasterKey: true });
 
+    // تسجيل المعاملة
     const payment = new PaymentsModel();
     payment.set("author", user);
     payment.set("authorId", userId);
     payment.set("transactionId", transactionId);
     payment.set("productId", productId);
     payment.set("coins", coins);
-    payment.set("purchaseDate", purchaseDate);
+    payment.set("purchaseDate", new Date(purchaseDate));
     payment.set("paymentType", "coins");
     payment.set("status", "completed");
 
     await payment.save(null, { useMasterKey: true });
 
-    return { success: true, coinsAdded: coins, userId };
+    return { 
+        success: true, 
+        coinsAdded: coins, 
+        userId,
+        newBalance: user.get("credit")
+    };
 });
 
 //////////////////////////////////////////////////////////
-// Before Login Hook
+// =================== هوكس النظام ===================
 //////////////////////////////////////////////////////////
+
+// قبل تسجيل الدخول
 Parse.Cloud.beforeLogin(async (request) => {
     const user = request.object;
 
@@ -328,6 +483,9 @@ Parse.Cloud.beforeLogin(async (request) => {
     if (user.get("activationStatus")) {
         throw new Parse.Error(341, "Access denied, you have been blocked.");
     }
+    
+    // تحديث آخر وقت ظهور
+    user.set("lastOnline", new Date());
 });
 
 //////////////////////////////////////////////////////////
@@ -363,7 +521,7 @@ const FRUIT_MAP = {
 };
 
 //////////////////////////////////////////////////////////
-// جلب معلومات اللعبة والجولة الحالية
+// جلب معلومات اللعبة والجولة الحالية - محسنة
 //////////////////////////////////////////////////////////
 Parse.Cloud.define("game_info", async (request) => {
     const user = request.user;
@@ -372,6 +530,10 @@ Parse.Cloud.define("game_info", async (request) => {
     }
 
     const userId = user.id;
+    console.log(`🎮 Game info requested for user: ${userId}`);
+    
+    // 🔥 التعديل الذهبي: جلب البيانات مع حقل avatar
+    await user.fetch({ useMasterKey: true });
     
     // حساب الجولة الحالية
     const currentTime = Math.floor(Date.now() / 1000);
@@ -381,11 +543,14 @@ Parse.Cloud.define("game_info", async (request) => {
     const countdown = Math.max(0, roundEndTime - currentTime);
 
     // جلب بيانات المستخدم
-    await user.fetch({ useMasterKey: true });
     const userCredits = user.get("credit") || 0;
     const userProfit = user.get("gameProfit") || 0;
+    
+    // 🔥 التعديل المهم: استخراج الصورة والاسم بعد fetch
     const userAvatar = getImageUrl(user.get("avatar"));
     const userNickname = getNickname(user);
+    
+    console.log(`👤 User data - Avatar: ${userAvatar ? 'Found' : 'Not found'}, Nickname: ${userNickname}`);
 
     // التحقق من نتيجة الجولة السابقة
     const lastResultQuery = new Parse.Query(FerrisWheelResults);
@@ -418,8 +583,10 @@ Parse.Cloud.define("game_info", async (request) => {
             const betGold = bet.get("gold") || 0;
             const winAmount = Math.floor(betGold * FRUIT_MULTIPLIERS[previousWinningFruit]);
 
+            // 🔥 جلب بيانات المستخدم الفائز مع avatar
             const betUser = await new Parse.Query(Parse.User).get(betUserId, { useMasterKey: true });
             if (betUser) {
+                await betUser.fetch({ useMasterKey: true });
                 betUser.increment("credit", winAmount);
                 betUser.increment("gameProfit", winAmount);
                 await betUser.save(null, { useMasterKey: true });
@@ -429,6 +596,7 @@ Parse.Cloud.define("game_info", async (request) => {
                 const betUserNickname = getNickname(betUser);
                 
                 topList.push({
+                    uid: betUserId,
                     avatar: betUserAvatar,
                     nick: betUserNickname,
                     total: winAmount,
@@ -450,12 +618,15 @@ Parse.Cloud.define("game_info", async (request) => {
             const betGold = bet.get("gold") || 0;
             const winAmount = Math.floor(betGold * FRUIT_MULTIPLIERS[previousWinningFruit]);
 
+            // 🔥 جلب بيانات المستخدم الفائز مع avatar
             const betUser = await new Parse.Query(Parse.User).get(betUserId, { useMasterKey: true });
             if (betUser) {
+                await betUser.fetch({ useMasterKey: true });
                 const betUserAvatar = getImageUrl(betUser.get("avatar"));
                 const betUserNickname = getNickname(betUser);
                 
                 topList.push({
+                    uid: betUserId,
                     avatar: betUserAvatar,
                     nick: betUserNickname,
                     total: winAmount,
@@ -585,7 +756,9 @@ Parse.Cloud.define("game_choice", async (request) => {
     return {
         code: 200,
         message: "Bet placed successfully",
-        balance: newBalance
+        balance: newBalance,
+        choice: choice,
+        gold: gold
     };
 });
 
@@ -636,28 +809,32 @@ Parse.Cloud.define("game_bill", async (request) => {
 });
 
 //////////////////////////////////////////////////////////
-// جلب ترتيب اللاعبين
+// جلب ترتيب اللاعبين - محسنة
 //////////////////////////////////////////////////////////
 Parse.Cloud.define("game_rank", async (request) => {
     const rankQuery = new Parse.Query(Parse.User);
     rankQuery.descending("credit");
     rankQuery.limit(10);
-    rankQuery.select(["name", "username", "avatar", "credit", "first_name", "last_name"]);
+    rankQuery.select(["username", "avatar", "credit", "first_name", "last_name"]);
     
     try {
         const topUsers = await rankQuery.find({ useMasterKey: true });
 
-        const rankList = topUsers.map(user => {
+        const rankList = [];
+        for (const user of topUsers) {
+            // 🔥 جلب البيانات مع avatar
+            await user.fetch({ useMasterKey: true });
             const avatar = getImageUrl(user.get("avatar"));
             const nickname = getNickname(user);
             
-            return {
+            rankList.push({
                 id: user.id,
+                uid: user.id,
                 nick: nickname,
                 avatar: avatar,
                 total: user.get("credit") || 0,
-            };
-        });
+            });
+        }
 
         return {
             code: 200,
@@ -675,7 +852,7 @@ Parse.Cloud.define("game_rank", async (request) => {
 });
 
 //////////////////////////////////////////////////////////
-// التحقق من صلاحية اللاعب للعبة
+// التحقق من صلاحية اللاعب للعبة - محسنة
 //////////////////////////////////////////////////////////
 Parse.Cloud.define("game_validate_player", async (request) => {
     const user = request.user;
@@ -683,16 +860,20 @@ Parse.Cloud.define("game_validate_player", async (request) => {
         return { code: 700, message: "User not authenticated" };
     }
 
+    // 🔥 التعديل الذهبي: جلب البيانات مع حقل avatar
     await user.fetch({ useMasterKey: true });
 
     const avatar = getImageUrl(user.get("avatar"));
     const nickname = getNickname(user);
+    
+    console.log(`✅ Validating player: ${nickname}, Avatar: ${avatar ? 'Found' : 'Not found'}`);
     
     return {
         code: 200,
         message: "Valid player",
         data: {
             userId: user.id,
+            uid: user.id,
             username: user.get("username"),
             nickname: nickname,
             avatar: avatar,
@@ -720,7 +901,9 @@ Parse.Cloud.define("game_reset", async (request) => {
     deleteBetsQuery.equalTo("userId", userId);
     const userBets = await deleteBetsQuery.find({ useMasterKey: true });
     
-    await Parse.Object.destroyAll(userBets, { useMasterKey: true });
+    if (userBets.length > 0) {
+        await Parse.Object.destroyAll(userBets, { useMasterKey: true });
+    }
     
     // إعادة تعيين الأرباح
     user.set("gameProfit", 0);
@@ -733,261 +916,57 @@ Parse.Cloud.define("game_reset", async (request) => {
 });
 
 //////////////////////////////////////////////////////////
-// توليد نتائج اختبارية
+// دوال إضافية مفيدة
 //////////////////////////////////////////////////////////
-Parse.Cloud.define("game_generate_test_data", async (request) => {
-    // فقط للأغراض التنموية
-    const { rounds } = request.params;
-    const numRounds = rounds || 10;
-    
-    const fruits = ['g', 'h', 'a', 'b', 'c', 'd', 'e', 'f'];
-    
-    for (let i = 1; i <= numRounds; i++) {
-        const randomFruit = fruits[Math.floor(Math.random() * fruits.length)];
-        
-        const result = new FerrisWheelResults();
-        result.set("round", i);
-        result.set("result", randomFruit);
-        await result.save(null, { useMasterKey: true });
+
+// الحصول على إحصائيات المستخدم
+Parse.Cloud.define("getUserStats", async (request) => {
+    const user = request.user;
+    if (!user) {
+        throw new Parse.Error(Parse.Error.SESSION_MISSING, "User not authenticated");
     }
+
+    await user.fetch({ useMasterKey: true });
     
     return {
-        code: 200,
-        message: `Generated ${numRounds} test rounds`
+        success: true,
+        stats: {
+            userId: user.id,
+            username: user.get("username"),
+            nickname: getNickname(user),
+            avatar: getImageUrl(user.get("avatar")),
+            credits: user.get("credit") || 0,
+            diamonds: user.get("diamonds") || 0,
+            gameProfit: user.get("gameProfit") || 0,
+            followers: (user.get("followers") || []).length,
+            following: (user.get("following") || []).length,
+            lastOnline: user.get("lastOnline"),
+            createdAt: user.createdAt
+        }
     };
 });
-// 2. دالة Cloud مع معاملات
-Parse.Cloud.define("greet", (request) => {
-  const { name } = request.params;
-  return `Hello, ${name}!`;
-});
 
-// 3. دالة Cloud مع قاعدة البيانات
-Parse.Cloud.define("getUserCount", async (request) => {
-  const query = new Parse.Query(Parse.User);
-  const count = await query.count();
-  return { userCount: count };
-});
-
-// 4. دالة Cloud مع الصلاحيات الكاملة
-Parse.Cloud.define("createObject", async (request) => {
-  const { className, data } = request.params;
-  const object = new Parse.Object(className);
-  
-  // تعيين البيانات
-  for (const key in data) {
-    object.set(key, data[key]);
-  }
-  
-  // حفظ مع صلاحيات كاملة
-  await object.save(null, { useMasterKey: true });
-  return { success: true, objectId: object.id };
-});
-
-// 5. دالة Cloud للبحث
-Parse.Cloud.define("search", async (request) => {
-  const { className, key, value } = request.params;
-  const query = new Parse.Query(className);
-  query.equalTo(key, value);
-  const results = await query.find({ useMasterKey: true });
-  return results;
-});
-
-// 6. دالة Cloud للتحديث
-Parse.Cloud.define("updateObject", async (request) => {
-  const { className, objectId, data } = request.params;
-  const query = new Parse.Query(className);
-  const object = await query.get(objectId, { useMasterKey: true });
-  
-  // تحديث البيانات
-  for (const key in data) {
-    object.set(key, data[key]);
-  }
-  
-  await object.save(null, { useMasterKey: true });
-  return { success: true, objectId: object.id };
-});
-
-// 7. دالة Cloud للحذف
-Parse.Cloud.define("deleteObject", async (request) => {
-  const { className, objectId } = request.params;
-  const query = new Parse.Query(className);
-  const object = await query.get(objectId, { useMasterKey: true });
-  await object.destroy({ useMasterKey: true });
-  return { success: true, message: 'Object deleted' };
-});
-
-// 8. دالة Cloud للاستعلام المتقدم
-Parse.Cloud.define("advancedQuery", async (request) => {
-  const { className, where, limit = 100, skip = 0 } = request.params;
-  const query = new Parse.Query(className);
-  
-  // تطبيق الشروط
-  if (where) {
-    for (const key in where) {
-      const condition = where[key];
-      if (condition.$gt !== undefined) query.greaterThan(key, condition.$gt);
-      if (condition.$lt !== undefined) query.lessThan(key, condition.$lt);
-      if (condition.$eq !== undefined) query.equalTo(key, condition.$eq);
-      if (condition.$ne !== undefined) query.notEqualTo(key, condition.$ne);
+// تحديث صورة الملف الشخصي
+Parse.Cloud.define("updateAvatar", async (request) => {
+    const user = request.user;
+    const { avatarUrl } = request.params;
+    
+    if (!user) {
+        throw new Parse.Error(Parse.Error.SESSION_MISSING, "User not authenticated");
     }
-  }
-  
-  query.limit(limit);
-  query.skip(skip);
-  
-  const results = await query.find({ useMasterKey: true });
-  return {
-    count: results.length,
-    results: results
-  };
-});
-
-// 9. Hook - قبل الحفظ
-Parse.Cloud.beforeSave("GameScore", (request) => {
-  const object = request.object;
-  
-  // التحقق من الصحة
-  if (object.get("score") < 0) {
-    throw new Parse.Error(Parse.Error.VALIDATION_ERROR, "Score cannot be negative");
-  }
-  
-  // إضافة timestamp
-  object.set("lastModified", new Date());
-});
-
-// 10. Hook - بعد الحفظ
-Parse.Cloud.afterSave("GameScore", (request) => {
-  console.log(`GameScore saved: ${request.object.id}`);
-});
-
-// 11. Hook - قبل الحذف
-Parse.Cloud.beforeDelete("GameScore", (request) => {
-  console.log(`GameScore will be deleted: ${request.object.id}`);
-});
-
-// 12. Hook - بعد الحذف
-Parse.Cloud.afterDelete("GameScore", (request) => {
-  console.log(`GameScore deleted: ${request.object.id}`);
-});
-
-// 13. دالة Cloud للإحصائيات
-Parse.Cloud.define("getStats", async (request) => {
-  const { className } = request.params;
-  const query = new Parse.Query(className);
-  const count = await query.count({ useMasterKey: true });
-  
-  return {
-    className: className,
-    totalCount: count,
-    timestamp: new Date().toISOString()
-  };
-});
-
-// 14. دالة Cloud للتصدير
-Parse.Cloud.define("exportData", async (request) => {
-  const { className, limit = 1000 } = request.params;
-  const query = new Parse.Query(className);
-  query.limit(limit);
-  
-  const results = await query.find({ useMasterKey: true });
-  const data = results.map(obj => obj.toJSON());
-  
-  return {
-    className: className,
-    count: data.length,
-    data: data
-  };
-});
-
-// 15. دالة Cloud للاستيراد
-Parse.Cloud.define("importData", async (request) => {
-  const { className, data } = request.params;
-  
-  if (!Array.isArray(data)) {
-    throw new Parse.Error(Parse.Error.INVALID_JSON, "Data must be an array");
-  }
-  
-  const results = [];
-  for (const item of data) {
-    const object = new Parse.Object(className);
-    for (const key in item) {
-      object.set(key, item[key]);
+    
+    if (!avatarUrl) {
+        throw new Parse.Error(Parse.Error.INVALID_QUERY, "Avatar URL is required");
     }
-    await object.save(null, { useMasterKey: true });
-    results.push(object.id);
-  }
-  
-  return {
-    success: true,
-    imported: results.length,
-    ids: results
-  };
+    
+    user.set("avatar", avatarUrl);
+    await user.save(null, { useMasterKey: true });
+    
+    return {
+        success: true,
+        message: "Avatar updated successfully",
+        avatar: getImageUrl(user.get("avatar"))
+    };
 });
 
-// 16. دالة Cloud للتحقق من الصحة
-Parse.Cloud.define("validate", (request) => {
-  const { data } = request.params;
-  
-  if (!data || typeof data !== 'object') {
-    throw new Parse.Error(Parse.Error.INVALID_JSON, "Invalid data format");
-  }
-  
-  return { valid: true, message: "Data is valid" };
-});
-
-// 17. دالة Cloud للبحث النصي
-Parse.Cloud.define("textSearch", async (request) => {
-  const { className, searchTerm, field } = request.params;
-  const query = new Parse.Query(className);
-  
-  // البحث النصي (يتطلب فهرس نصي في MongoDB)
-  query.contains(field, searchTerm);
-  
-  const results = await query.find({ useMasterKey: true });
-  return results;
-});
-
-// 18. دالة Cloud للترتيب
-Parse.Cloud.define("getSorted", async (request) => {
-  const { className, sortBy, order = "ascending" } = request.params;
-  const query = new Parse.Query(className);
-  
-  if (order === "descending") {
-    query.descending(sortBy);
-  } else {
-    query.ascending(sortBy);
-  }
-  
-  const results = await query.find({ useMasterKey: true });
-  return results;
-});
-
-// 19. دالة Cloud للتجميع
-Parse.Cloud.define("aggregate", async (request) => {
-  const { className } = request.params;
-  const query = new Parse.Query(className);
-  
-  const results = await query.find({ useMasterKey: true });
-  
-  return {
-    total: results.length,
-    timestamp: new Date().toISOString(),
-    className: className
-  };
-});
-
-// 20. دالة Cloud للإشعارات
-Parse.Cloud.define("sendNotification", async (request) => {
-  const { title, message, target } = request.params;
-  
-  // يمكن إضافة منطق الإشعارات هنا
-  console.log(`Notification: ${title} - ${message} to ${target}`);
-  
-  return {
-    success: true,
-    message: "Notification sent"
-  };
-});
-
-console.log("✅ Cloud Code loaded successfully!");
+console.log("✅ Cloud Code loaded successfully with enhanced image handling!");
