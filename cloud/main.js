@@ -115,7 +115,7 @@ function getImageUrl(avatarData) {
             
             // إذا كان يحتوي على name فقط، بناء الرابط
             if (avatarData.includes('_avatar') || avatarData.includes('.jpg') || avatarData.includes('.png')) {
-                const url = `https://parse410.onrender.com/parse/files/myAppId/${avatarData}`;
+                const url = `https://parse410.onrender.com/parse/files/spp111424242ssdsd/${avatarData}`;
                 console.log("🔗 Built URL from filename:", url);
                 return url;
             }
