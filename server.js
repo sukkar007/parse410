@@ -1,137 +1,170 @@
+'use strict';
+
 const express = require('express');
-const { ParseServer, FilesAdapter } = require('parse-server'); // ✅ استيراد FilesAdapter
-const ParseDashboard = require('parse-dashboard');
 const http = require('http');
 const path = require('path');
-const B2 = require('backblaze-b2'); // npm i backblaze-b2
+
+const { ParseServer } = require('parse-server');
+const ParseDashboard = require('parse-dashboard');
 
 const app = express();
-app.set('trust proxy', 1); // مهم لـ Render
 
 /* ===============================
-Middleware
-=============================== */
+   Trust Proxy (مهم جدًا لـ Render)
+   =============================== */
+app.set('trust proxy', 1);
+
+/* ===============================
+   Middlewares
+   =============================== */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===============================
-Static Files لموقعك فقط
-=============================== */
+   Static Files (موقعك فقط)
+   =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
 /* ===============================
-Backblaze B2 Adapter
-=============================== */
-class B2FilesAdapter extends FilesAdapter { // ✅ الوراثة من FilesAdapter
-    constructor(options) {
-        super(); // ✅ استدعاء super()
-        this.bucketName = options.bucketName;
-        this.b2 = new B2({
-            applicationKeyId: options.applicationKeyId,
-            applicationKey: options.applicationKey,
-        });
-    }
-
-    async createFile(config, filename, data, contentType) {
-        const uploadUrlResponse = await this.b2.getUploadUrl({ bucketId: this.bucketName });
-        const uploadUrl = uploadUrlResponse.data.uploadUrl;
-        const uploadAuthToken = uploadUrlResponse.data.authorizationToken;
-
-        const response = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': uploadAuthToken,
-                'X-Bz-File-Name': filename,
-                'Content-Type': contentType
-            },
-            body: data
-        });
-
-        return {
-            url: `https://f000.backblazeb2.com/file/${this.bucketName}/${filename}`
-        };
-    }
-
-    async deleteFile(config, filename) {
-        console.log('Delete file not implemented for B2');
-    }
-}
-
-/* ===============================
-Parse Server Configuration
-=============================== */
+   Parse Server Configuration
+   =============================== */
 const parseServer = new ParseServer({
-    appId: process.env.APP_ID || 'myAppId',
-    masterKey: process.env.MASTER_KEY || 'myMasterKey',
-    clientKey: process.env.CLIENT_KEY || 'myClientKey',
-    fileKey: process.env.FILE_KEY,
-    restAPIKey: process.env.REST_API_KEY,
-    databaseURI: process.env.DATABASE_URI,
-    serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-    publicServerURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-    cloud: path.join(__dirname, 'cloud/main.js'),
-    filesAdapter: new B2FilesAdapter({
-        applicationKeyId: process.env.B2_KEY_ID || '3ff2cfbeee04',
-        applicationKey: process.env.B2_APPLICATION_KEY || '005ab4454c98830468aa3cb458c870d1bf036f4a3e',
-        bucketName: process.env.B2_BUCKET_NAME || 'my-bucket'
-    }),
-    liveQuery: { classNames: ['*'], redisURL: process.env.REDIS_URL },
-    allowClientClassCreation: true,
-    allowCustomObjectId: true,
-    defaultLimit: 100,
-    maxLimit: 1000,
-    logLevel: process.env.LOG_LEVEL || 'info'
+  appId: process.env.APP_ID,
+  masterKey: process.env.MASTER_KEY,
+  clientKey: process.env.CLIENT_KEY,
+  fileKey: process.env.FILE_KEY,
+  restAPIKey: process.env.REST_API_KEY,
+
+  databaseURI: process.env.DATABASE_URI,
+
+  serverURL: process.env.SERVER_URL,
+  publicServerURL: process.env.SERVER_URL,
+
+  cloud: path.join(__dirname, 'cloud/main.js'),
+
+  /* ===============================
+     Backblaze B2 (S3 Adapter)
+     =============================== */
+  filesAdapter: {
+    module: '@parse/s3-files-adapter',
+    options: {
+      bucket: process.env.B2_BUCKET_NAME,
+      region: 'us-west-004',
+      endpoint: 'https://s3.us-west-004.backblazeb2.com',
+      accessKey: process.env.B2_KEY_ID,
+      secretKey: process.env.B2_APPLICATION_KEY,
+      directAccess: true
+    }
+  },
+
+  /* ===============================
+     LiveQuery
+     =============================== */
+  liveQuery: {
+    classNames: ['*'],
+    redisURL: process.env.REDIS_URL
+  },
+
+  allowClientClassCreation: true,
+  allowCustomObjectId: true,
+
+  defaultLimit: 100,
+  maxLimit: 1000,
+
+  graphQLPath: '/graphql',
+  graphQLPlaygroundPath: '/graphql-playground',
+
+  logLevel: process.env.LOG_LEVEL || 'info'
 });
 
 /* ===============================
-Mount Parse API
-=============================== */
+   Mount Parse API
+   =============================== */
 app.use('/parse', parseServer);
 
 /* ===============================
-Parse Dashboard
-=============================== */
+   Parse Dashboard
+   =============================== */
+
+// static files للداش بورد (ضروري)
+app.use(
+  '/dashboard',
+  express.static(
+    path.join(__dirname, 'node_modules/parse-dashboard/public')
+  )
+);
+
 const dashboard = new ParseDashboard(
-    {
-        apps: [
-            {
-                serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-                appId: process.env.APP_ID || 'myAppId',
-                masterKey: process.env.MASTER_KEY || 'myMasterKey',
-                appName: process.env.APP_NAME || 'MyParseApp'
-            }
-        ],
-        users: [
-            {
-                user: process.env.DASHBOARD_USER || 'admin',
-                pass: process.env.DASHBOARD_PASS || 'admin123'
-            }
-        ]
-    },
-    { allowInsecureHTTP: true }
+  {
+    apps: [
+      {
+        serverURL: process.env.SERVER_URL,
+        appId: process.env.APP_ID,
+        masterKey: process.env.MASTER_KEY,
+        appName: process.env.APP_NAME || 'Parse Server'
+      }
+    ],
+    users: [
+      {
+        user: process.env.DASHBOARD_USER,
+        pass: process.env.DASHBOARD_PASS
+      }
+    ]
+  },
+  {
+    allowInsecureHTTP: false
+  }
 );
 
 app.use('/dashboard', dashboard);
 
 /* ===============================
-HTTP + LiveQuery Server
-=============================== */
+   HTTP + LiveQuery Server
+   =============================== */
 const httpServer = http.createServer(app);
 ParseServer.createLiveQueryServer(httpServer);
 
 /* ===============================
-Health Check
-=============================== */
+   Health Check
+   =============================== */
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString()
+  });
 });
 
 /* ===============================
-Start Server
-=============================== */
-const PORT = process.env.PORT || 1337;
-httpServer.listen(PORT, () => {
-    console.log(`Parse Server running on port ${PORT}`);
-    console.log(`Parse API: http://localhost:${PORT}/parse`);
-    console.log(`Parse Dashboard: http://localhost:${PORT}/dashboard`);
+   Error Handling
+   =============================== */
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
+
+/* ===============================
+   Start Server
+   =============================== */
+const PORT = process.env.PORT || 1337;
+
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log('════════════════════════════════════');
+  console.log('✅ Parse Server 4.10.4 Running');
+  console.log(`📍 API: ${process.env.SERVER_URL}`);
+  console.log(`📊 Dashboard: ${process.env.SERVER_URL.replace('/parse', '/dashboard')}`);
+  console.log('════════════════════════════════════');
+});
+
+/* ===============================
+   Process Safety
+   =============================== */
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+module.exports = app;
