@@ -16,7 +16,7 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* =============================== Static Files (موقعك فقط) =============================== */
+/* =============================== Static Files =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
 /* =============================== Parse Server Configuration =============================== */
@@ -34,16 +34,15 @@ const parseServer = new ParseServer({
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* =============================== Backblaze B2 (S3 Adapter) ثابت =============================== */
+  /* =============================== Backblaze B2 (S3 Adapter) =============================== */
   filesAdapter: new (require('@parse/s3-files-adapter'))({
     bucket: 'flamingo', // اسم الدلو ثابت
-    region: 'us-east-005',
-    endpoint: 'https://s3.us-east-005.backblazeb2.com',
+    endpoint: 'https://s3.us-east-005.backblazeb2.com', // endpoint كامل
     accessKey: '3ff2cfbeee04',
     secretKey: '0056df25d7c68fa161924cd7efb24a9cccb3433c74',
     directAccess: true,
     signatureVersion: 'v4',
-    s3ForcePathStyle: true
+    s3ForcePathStyle: true // مهم مع Backblaze
   }),
 
   /* =============================== LiveQuery =============================== */
