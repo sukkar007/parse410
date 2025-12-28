@@ -37,7 +37,7 @@ const parseServer = new ParseServer({
   /* =============================== Backblaze B2 (S3 Adapter) =============================== */
   filesAdapter: new (require('@parse/s3-files-adapter'))({
     bucket: 'flamingo',                                 // اسم الدلو
-    region: 'us-east-005',                               // المنطقة
+                                  // المنطقة
     endpoint: 'https://s3.us-east-005.backblazeb2.com', // endpoint كامل
     accessKey: '0053ff2cfbeee040000000003',             // keyID الجديد
     secretKey: 'K0052OO4YExR40PyMYGeC+ZPrDMRCqU',       // applicationKey الجديد
