@@ -1,9 +1,11 @@
 import express from 'express';
-import { ParseServer } from 'parse-server';
+import { ParseServer, FilesAdapter } from 'parse-server';
 import ParseDashboard from 'parse-dashboard';
 import path from 'path';
 import http from 'http';
-import B2Adapter from '@parse/b2-files-adapter'; // npm i @parse/b2-files-adapter
+import B2 from 'backblaze-b2'; // npm install backblaze-b2
+import fs from 'fs';
+import os from 'os';
 
 const __dirname = path.resolve();
 const app = express();
@@ -27,12 +29,43 @@ app.use('/', express.static(path.join(__dirname, 'public_html')));
 /* ===============================
    Backblaze B2 Files Adapter
    =============================== */
-const filesAdapter = new B2Adapter({
-  applicationKeyId: '3ff2cfbeee04',       // KeyID
-  applicationKey: '005ab4454c98830468aa3cb458c870d1bf036f4a3e', // Application Key
-  bucketName: 'flamingo',                  // اسم الحاوية
-  directAccess: true                        // true = روابط مباشرة للمستخدمين
-});
+class B2FilesAdapter extends FilesAdapter {
+  constructor() {
+    super(); // Parse FilesAdapter
+    this.b2 = new B2({
+      applicationKeyId: process.env.B2_KEY_ID || '3ff2cfbeee04',
+      applicationKey: process.env.B2_APPLICATION_KEY || '005ab4454c98830468aa3cb458c870d1bf036f4a3e'
+    });
+    this.bucketName = process.env.B2_BUCKET || 'flamingo';
+    this.authorized = false;
+  }
+
+  async authorize() {
+    if (!this.authorized) {
+      await this.b2.authorize();
+      this.authorized = true;
+    }
+  }
+
+  async createFile(filename, data) {
+    await this.authorize();
+    const tmpFile = path.join(os.tmpdir(), filename);
+    await fs.promises.writeFile(tmpFile, data);
+
+    const uploadUrlResponse = await this.b2.getUploadUrl({ bucketId: this.bucketName });
+    const uploadResponse = await this.b2.uploadFile({
+      uploadUrl: uploadUrlResponse.data.uploadUrl,
+      uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+      filename: filename,
+      data: fs.createReadStream(tmpFile)
+    });
+
+    await fs.promises.unlink(tmpFile);
+    return { url: `https://f002.backblazeb2.com/file/${this.bucketName}/${filename}` };
+  }
+}
+
+const filesAdapter = new B2FilesAdapter();
 
 /* ===============================
    Start Server
