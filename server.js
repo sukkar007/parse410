@@ -5,12 +5,12 @@ const http = require('http');
 const path = require('path');
 const cloudinary = require('cloudinary').v2;
 const https = require('https');
-require('dotenv').config(); // للتأكد من تحميل متغيرات البيئة
+require('dotenv').config(); // تحميل متغيرات البيئة
 
 const app = express();
 
 /* ===============================
-   Trust Proxy (مهم جدًا لـ Render)
+   Trust Proxy (مهم لـ Render)
    =============================== */
 app.set('trust proxy', 1);
 
@@ -38,7 +38,6 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
-
 console.log('☁️ Cloudinary configured successfully');
 
 /* ===============================
@@ -56,7 +55,7 @@ class CloudinaryFilesAdapter {
   }
 
   _publicId(filename) {
-    return this._safeName(filename).replace(/\.[^/.]+$/, '');
+    return this._safeName(filename).replace(/\.[^/.]+$/, '') + '_' + Date.now();
   }
 
   async createFile(config, filename, data, contentType) {
@@ -69,7 +68,7 @@ class CloudinaryFilesAdapter {
     else if (contentType?.mime) mime = contentType.mime;
 
     try {
-      // التأكد أن البيانات Buffer
+      // تحويل البيانات إلى Buffer و Base64
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       const base64 = buffer.toString('base64');
       const dataURI = `data:${mime};base64,${base64}`;
@@ -80,7 +79,7 @@ class CloudinaryFilesAdapter {
         overwrite: true
       });
 
-      console.log(`✅ Uploaded: ${publicId}`);
+      // إعادة كائن Parse-compatible
       return {
         url: result.secure_url,
         name: safeName
