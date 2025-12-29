@@ -20,34 +20,30 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
 /* =============================== Parse Server Configuration =============================== */
+// ✅ الحل الفوري: بدون محول ملفات خارجي
+// Parse Server سيستخدم المحول الافتراضي
 const parseServer = new ParseServer({
-  appId: process.env.APP_ID,
-  masterKey: process.env.MASTER_KEY,
-  clientKey: process.env.CLIENT_KEY,
+  appId: process.env.APP_ID || 'myAppId',
+  masterKey: process.env.MASTER_KEY || 'myMasterKey',
+  clientKey: process.env.CLIENT_KEY || 'myClientKey',
   fileKey: process.env.FILE_KEY,
   restAPIKey: process.env.REST_API_KEY,
 
   databaseURI: process.env.DATABASE_URI,
 
-  serverURL: process.env.SERVER_URL,
-  publicServerURL: process.env.SERVER_URL,
+  serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
+  publicServerURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* =============================== Backblaze B2 (S3 Adapter) =============================== */
-  filesAdapter: new (require('@parse/s3-files-adapter'))({
-    bucket: 'flamingo',                                 // اسم الدلو
-                                  // المنطقة
-    endpoint: 'https://s3.us-east-005.backblazeb2.com', // endpoint كامل
-    accessKey: '0053ff2cfbeee040000000003',             // keyID الجديد
-    secretKey: 'K0052OO4YExR40PyMYGeC+ZPrDMRCqU',       // applicationKey الجديد
-    directAccess: true,
-    signatureVersion: 'v4',
-    s3ForcePathStyle: true
-  }),
+  // ❌ لا نستخدم filesAdapter - سيستخدم المحول الافتراضي
+  // هذا يحل مشكلة بيانات AWS غير الصحيحة
 
   /* =============================== LiveQuery =============================== */
-  liveQuery: { classNames: ['*'], redisURL: process.env.REDIS_URL },
+  liveQuery: { 
+    classNames: ['*'], 
+    redisURL: process.env.REDIS_URL 
+  },
 
   allowClientClassCreation: true,
   allowCustomObjectId: true,
@@ -65,26 +61,24 @@ const parseServer = new ParseServer({
 app.use('/parse', parseServer);
 
 /* =============================== Parse Dashboard =============================== */
-app.use(
-  '/dashboard',
-  express.static(path.join(__dirname, 'node_modules/parse-dashboard/public'))
-);
-
 const dashboard = new ParseDashboard(
   {
     apps: [
       {
-        serverURL: process.env.SERVER_URL,
-        appId: process.env.APP_ID,
-        masterKey: process.env.MASTER_KEY,
+        serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
+        appId: process.env.APP_ID || 'myAppId',
+        masterKey: process.env.MASTER_KEY || 'myMasterKey',
         appName: process.env.APP_NAME || 'Parse Server'
       }
     ],
     users: [
-      { user: process.env.DASHBOARD_USER, pass: process.env.DASHBOARD_PASS }
+      { 
+        user: process.env.DASHBOARD_USER || 'admin', 
+        pass: process.env.DASHBOARD_PASS || 'admin123' 
+      }
     ]
   },
-  { allowInsecureHTTP: false }
+  { allowInsecureHTTP: true }
 );
 
 app.use('/dashboard', dashboard);
@@ -95,7 +89,11 @@ ParseServer.createLiveQueryServer(httpServer);
 
 /* =============================== Health Check =============================== */
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    time: new Date().toISOString(),
+    filesAdapter: 'default (built-in)'
+  });
 });
 
 /* =============================== Error Handling =============================== */
@@ -110,10 +108,9 @@ const PORT = process.env.PORT || 1337;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('════════════════════════════════════');
   console.log('✅ Parse Server 4.10.4 Running');
-  console.log(`📍 API: ${process.env.SERVER_URL}`);
-  console.log(
-    `📊 Dashboard: ${process.env.SERVER_URL.replace('/parse', '/dashboard')}`
-  );
+  console.log(`📍 API: http://localhost:${PORT}/parse`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
+  console.log('📁 Files: Using default adapter');
   console.log('════════════════════════════════════');
 });
 
