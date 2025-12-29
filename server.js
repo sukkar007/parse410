@@ -20,7 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===============================
-   Static Files (موقعك فقط)
+   Static Files
    =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
@@ -58,14 +58,24 @@ class CloudinaryFilesAdapter {
     return this._safeName(filename).replace(/\.[^/.]+$/, '');
   }
 
-  /* ---------- create ---------- */
+  /* ---------- create file ---------- */
   async createFile(config, filename, data, contentType) {
     const safeName = this._safeName(filename);
     const publicId = this._publicId(safeName);
 
+    // ✅ FIX: contentType may be OBJECT
+    let mime = 'application/octet-stream';
+    if (typeof contentType === 'string') {
+      mime = contentType;
+    } else if (contentType?.type) {
+      mime = contentType.type;
+    } else if (contentType?.mime) {
+      mime = contentType.mime;
+    }
+
     try {
       const base64 = data.toString('base64');
-      const dataURI = `data:${contentType || 'application/octet-stream'};base64,${base64}`;
+      const dataURI = `data:${mime};base64,${base64}`;
 
       const result = await this.cloudinary.uploader.upload(dataURI, {
         public_id: publicId,
@@ -201,7 +211,7 @@ app.use('/dashboard', dashboard);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    storage: 'Cloudinary',
+    files: 'Cloudinary',
     liveQuery: true,
     time: new Date().toISOString()
   });
