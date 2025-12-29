@@ -54,13 +54,18 @@ class CloudinaryFilesAdapter {
     return `file_${Date.now()}`;
   }
 
-  _publicId(filename) {
-    return this._safeName(filename).replace(/\.[^/.]+$/, '') + '_' + Date.now();
+  // تم تعديل هذه الدالة لاستخراج الـ public_id من اسم الملف المخزن في Parse
+  _getPublicId(filename) {
+    // Parse يخزن الملفات بأسماء مثل "tfss-abc-filename.png" أو فقط "filename.png"
+    // في تطبيقنا، نحن ننشئ الـ public_id كـ filename_timestamp
+    // إذا كان filename يحتوي على الـ timestamp بالفعل (كما في حالة الاسترجاع)، سنستخدمه كما هو
+    return filename.replace(/\.[^/.]+$/, '');
   }
 
   async createFile(config, filename, data, contentType) {
     const safeName = this._safeName(filename);
-    const publicId = this._publicId(safeName);
+    // نستخدم اسم الملف الأصلي مع طابع زمني لضمان التفرد
+    const publicId = safeName.replace(/\.[^/.]+$/, '') + '_' + Date.now();
 
     let mime = 'application/octet-stream';
     if (typeof contentType === 'string') mime = contentType;
@@ -68,7 +73,6 @@ class CloudinaryFilesAdapter {
     else if (contentType?.mime) mime = contentType.mime;
 
     try {
-      // تحويل البيانات إلى Buffer و Base64
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
       const base64 = buffer.toString('base64');
       const dataURI = `data:${mime};base64,${base64}`;
@@ -79,10 +83,12 @@ class CloudinaryFilesAdapter {
         overwrite: true
       });
 
-      // إعادة كائن Parse-compatible
+      // Parse يتوقع اسم الملف الذي سيتم تخزينه في قاعدة البيانات
+      // سنعيد الـ public_id مع الامتداد لسهولة الاسترجاع لاحقاً
+      const extension = path.extname(safeName);
       return {
         url: result.secure_url,
-        name: safeName
+        name: publicId + extension
       };
     } catch (err) {
       console.error('❌ Cloudinary createFile ERROR:', err.message);
@@ -92,7 +98,7 @@ class CloudinaryFilesAdapter {
 
   async deleteFile(config, filename) {
     try {
-      const publicId = this._publicId(filename);
+      const publicId = this._getPublicId(filename);
       await this.cloudinary.uploader.destroy(publicId);
       console.log(`🗑️ Deleted: ${publicId}`);
     } catch (err) {
@@ -101,13 +107,15 @@ class CloudinaryFilesAdapter {
   }
 
   async getFileLocation(config, filename) {
+    // إذا كان filename هو رابط كامل بالفعل
+    if (filename.startsWith('http')) return filename;
+    
     try {
-      const publicId = this._publicId(filename);
-      const res = await this.cloudinary.api.resource(publicId);
-      return res.secure_url;
+      const publicId = this._getPublicId(filename);
+      // محاولة الحصول على الرابط مباشرة من Cloudinary
+      return this.cloudinary.url(publicId, { secure: true });
     } catch (err) {
-      if (err.http_code === 404) return null;
-      throw err;
+      return null;
     }
   }
 
@@ -117,6 +125,9 @@ class CloudinaryFilesAdapter {
 
     return new Promise((resolve, reject) => {
       https.get(url, res => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`Failed to fetch file: ${res.statusCode}`));
+        }
         const chunks = [];
         res.on('data', d => chunks.push(d));
         res.on('end', () => resolve(Buffer.concat(chunks)));
