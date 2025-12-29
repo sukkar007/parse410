@@ -3,23 +3,21 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
-
 const { ParseServer } = require('parse-server');
-const ParseDashboard = require('parse-dashboard');
 
 const app = express();
 
-/* =============================== Trust Proxy =============================== */
+/* ================= Trust Proxy ================= */
 app.set('trust proxy', 1);
 
-/* =============================== Middlewares =============================== */
+/* ================= Middlewares ================= */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* =============================== Static Files =============================== */
+/* ================= Static ================= */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
-/* =============================== Parse Server =============================== */
+/* ================= Parse Server ================= */
 const parseServer = new ParseServer({
   appId: process.env.APP_ID || 'myAppId',
   masterKey: process.env.MASTER_KEY || 'myMasterKey',
@@ -32,75 +30,51 @@ const parseServer = new ParseServer({
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* 🔥 السماح المطلق */
+  /* فتح عام */
   allowClientClassCreation: true,
-  allowClientClassUpdate: true,
   allowCustomObjectId: true,
   enableAnonymousUsers: true,
 
-  /* 🔥 تعطيل حماية السكيمة */
-  disableSchemaHooks: true,
+  /* مهم */
   schemaCacheTTL: 0,
 
-  /* 🔥 إجبار استخدام masterKey داخليًا */
-  useMasterKeyForQuery: true,
-
-  defaultLimit: 100,
-  maxLimit: 1000,
-
-  liveQuery: {
-    classNames: ['*']
-  },
+  /* LiveQuery */
+  liveQuery: { classNames: ['*'] },
 
   logLevel: 'verbose'
 });
 
-/* =============================== Mount Parse =============================== */
+/* ================= FORCE MASTERKEY FOR _User ================= */
+app.use('/parse/classes/_User', (req, res, next) => {
+  req.headers['x-parse-master-key'] = process.env.MASTER_KEY || 'myMasterKey';
+  next();
+});
+
+/* ================= Mount ================= */
 app.use('/parse', parseServer);
 
-/* =============================== Dashboard =============================== */
-const dashboard = new ParseDashboard(
-  {
-    apps: [
-      {
-        serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
-        appId: process.env.APP_ID || 'myAppId',
-        masterKey: process.env.MASTER_KEY || 'myMasterKey',
-        appName: 'Parse Server'
-      }
-    ],
-    users: [
-      { user: 'admin', pass: 'admin123' }
-    ]
-  },
-  { allowInsecureHTTP: true }
-);
-
-app.use('/dashboard', dashboard);
-
-/* =============================== HTTP Server =============================== */
+/* ================= HTTP ================= */
 const httpServer = http.createServer(app);
 ParseServer.createLiveQueryServer(httpServer);
 
-/* =============================== Health =============================== */
+/* ================= Health ================= */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    schema: 'unrestricted',
-    userClass: 'editable'
+    userSchema: 'auto',
+    mode: 'force-masterkey'
   });
 });
 
-/* =============================== Start =============================== */
+/* ================= Start ================= */
 const PORT = process.env.PORT || 1337;
-
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log('================================');
+  console.log('====================================');
   console.log('✅ Parse Server RUNNING');
-  console.log('🔓 Schema: OPEN (ALL)');
-  console.log('👤 _User: EDITABLE');
-  console.log(`📍 http://localhost:${PORT}/parse`);
-  console.log('================================');
+  console.log('👤 _User: AUTO FIELDS ENABLED');
+  console.log('🔓 Schema: DYNAMIC');
+  console.log(`📍 /parse`);
+  console.log('====================================');
 });
 
 module.exports = app;
