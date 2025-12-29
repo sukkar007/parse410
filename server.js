@@ -5,6 +5,7 @@ const http = require('http');
 const path = require('path');
 const cloudinary = require('cloudinary').v2;
 const https = require('https');
+require('dotenv').config(); // للتأكد من تحميل متغيرات البيئة
 
 const app = express();
 
@@ -27,27 +28,27 @@ app.use('/', express.static(path.join(__dirname, 'public_html')));
 /* ===============================
    Cloudinary Configuration
    =============================== */
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.error('❌ Cloudinary ENV missing!');
+  process.exit(1);
+}
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-console.log('☁️ Cloudinary:', {
-  cloud: !!process.env.CLOUDINARY_CLOUD_NAME,
-  key: !!process.env.CLOUDINARY_API_KEY,
-  secret: !!process.env.CLOUDINARY_API_SECRET
-});
+console.log('☁️ Cloudinary configured successfully');
 
 /* ===============================
-   Cloudinary Files Adapter (FIXED)
+   Cloudinary Files Adapter
    =============================== */
 class CloudinaryFilesAdapter {
   constructor() {
     this.cloudinary = cloudinary;
   }
 
-  /* ---------- helpers ---------- */
   _safeName(filename) {
     if (typeof filename === 'string') return filename;
     if (filename?.name) return filename.name;
@@ -58,23 +59,19 @@ class CloudinaryFilesAdapter {
     return this._safeName(filename).replace(/\.[^/.]+$/, '');
   }
 
-  /* ---------- create file ---------- */
   async createFile(config, filename, data, contentType) {
     const safeName = this._safeName(filename);
     const publicId = this._publicId(safeName);
 
-    // ✅ FIX: contentType may be OBJECT
     let mime = 'application/octet-stream';
-    if (typeof contentType === 'string') {
-      mime = contentType;
-    } else if (contentType?.type) {
-      mime = contentType.type;
-    } else if (contentType?.mime) {
-      mime = contentType.mime;
-    }
+    if (typeof contentType === 'string') mime = contentType;
+    else if (contentType?.type) mime = contentType.type;
+    else if (contentType?.mime) mime = contentType.mime;
 
     try {
-      const base64 = data.toString('base64');
+      // التأكد أن البيانات Buffer
+      const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      const base64 = buffer.toString('base64');
       const dataURI = `data:${mime};base64,${base64}`;
 
       const result = await this.cloudinary.uploader.upload(dataURI, {
@@ -84,18 +81,16 @@ class CloudinaryFilesAdapter {
       });
 
       console.log(`✅ Uploaded: ${publicId}`);
-
       return {
         url: result.secure_url,
         name: safeName
       };
     } catch (err) {
-      console.error('❌ Cloudinary createFile:', err);
+      console.error('❌ Cloudinary createFile ERROR:', err.message);
       throw err;
     }
   }
 
-  /* ---------- delete ---------- */
   async deleteFile(config, filename) {
     try {
       const publicId = this._publicId(filename);
@@ -106,7 +101,6 @@ class CloudinaryFilesAdapter {
     }
   }
 
-  /* ---------- location ---------- */
   async getFileLocation(config, filename) {
     try {
       const publicId = this._publicId(filename);
@@ -118,7 +112,6 @@ class CloudinaryFilesAdapter {
     }
   }
 
-  /* ---------- data ---------- */
   async getFileData(filename) {
     const url = await this.getFileLocation(null, filename);
     if (!url) return null;
@@ -136,37 +129,32 @@ class CloudinaryFilesAdapter {
 /* ===============================
    Parse Server Configuration
    =============================== */
+if (!process.env.APP_ID || !process.env.MASTER_KEY || !process.env.SERVER_URL) {
+  console.error('❌ Parse ENV missing!');
+  process.exit(1);
+}
+
 const parseServer = new ParseServer({
   appId: process.env.APP_ID,
   masterKey: process.env.MASTER_KEY,
   clientKey: process.env.CLIENT_KEY,
   fileKey: process.env.FILE_KEY,
   restAPIKey: process.env.REST_API_KEY,
-
   databaseURI: process.env.DATABASE_URI,
-
   serverURL: process.env.SERVER_URL,
   publicServerURL: process.env.SERVER_URL,
-
   cloud: path.join(__dirname, 'cloud/main.js'),
-
   filesAdapter: new CloudinaryFilesAdapter(),
-
   liveQuery: {
     classNames: ['*'],
     redisURL: process.env.REDIS_URL
   },
-
   allowClientClassCreation: true,
   allowCustomObjectId: true,
-
   defaultLimit: 100,
   maxLimit: 1000,
-
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
-
-  push: undefined,
   logLevel: process.env.LOG_LEVEL || 'info'
 });
 
@@ -178,30 +166,22 @@ app.use('/parse', parseServer);
 /* ===============================
    Parse Dashboard
    =============================== */
-app.use(
-  '/dashboard',
-  express.static(path.join(__dirname, 'node_modules/parse-dashboard/public'))
-);
-
-const dashboard = new ParseDashboard(
-  {
-    apps: [
-      {
-        serverURL: process.env.SERVER_URL,
-        appId: process.env.APP_ID,
-        masterKey: process.env.MASTER_KEY,
-        appName: process.env.APP_NAME || 'Parse App'
-      }
-    ],
-    users: [
-      {
-        user: process.env.DASHBOARD_USER,
-        pass: process.env.DASHBOARD_PASS
-      }
-    ]
-  },
-  { allowInsecureHTTP: false }
-);
+const dashboard = new ParseDashboard({
+  apps: [
+    {
+      serverURL: process.env.SERVER_URL,
+      appId: process.env.APP_ID,
+      masterKey: process.env.MASTER_KEY,
+      appName: process.env.APP_NAME || 'Parse App'
+    }
+  ],
+  users: [
+    {
+      user: process.env.DASHBOARD_USER,
+      pass: process.env.DASHBOARD_PASS
+    }
+  ]
+}, { allowInsecureHTTP: false });
 
 app.use('/dashboard', dashboard);
 
