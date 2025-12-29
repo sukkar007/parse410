@@ -4,6 +4,7 @@ const ParseDashboard = require('parse-dashboard');
 const http = require('http');
 const path = require('path');
 const cloudinary = require('cloudinary').v2;
+const https = require('https');
 
 const app = express();
 
@@ -19,8 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===============================
-   Static Files لموقعك فقط
-   (بدون تعارض مع Dashboard)
+   Static Files (موقعك فقط)
    =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
@@ -33,86 +33,95 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-console.log('☁️ Cloudinary configured:', {
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME ? '✅' : '❌',
-  api_key: process.env.CLOUDINARY_API_KEY ? '✅' : '❌',
-  api_secret: process.env.CLOUDINARY_API_SECRET ? '✅' : '❌'
+console.log('☁️ Cloudinary:', {
+  cloud: !!process.env.CLOUDINARY_CLOUD_NAME,
+  key: !!process.env.CLOUDINARY_API_KEY,
+  secret: !!process.env.CLOUDINARY_API_SECRET
 });
 
 /* ===============================
-   Cloudinary Files Adapter
+   Cloudinary Files Adapter (FIXED)
    =============================== */
 class CloudinaryFilesAdapter {
   constructor() {
     this.cloudinary = cloudinary;
   }
 
-  async createFile(config, filename, data, contentType) {
-    try {
-      // تحويل البيانات إلى Base64
-      const base64Data = data.toString('base64');
-      const dataURI = `data:${contentType || 'application/octet-stream'};base64,${base64Data}`;
+  /* ---------- helpers ---------- */
+  _safeName(filename) {
+    if (typeof filename === 'string') return filename;
+    if (filename?.name) return filename.name;
+    return `file_${Date.now()}`;
+  }
 
-      // رفع الملف إلى Cloudinary
+  _publicId(filename) {
+    return this._safeName(filename).replace(/\.[^/.]+$/, '');
+  }
+
+  /* ---------- create ---------- */
+  async createFile(config, filename, data, contentType) {
+    const safeName = this._safeName(filename);
+    const publicId = this._publicId(safeName);
+
+    try {
+      const base64 = data.toString('base64');
+      const dataURI = `data:${contentType || 'application/octet-stream'};base64,${base64}`;
+
       const result = await this.cloudinary.uploader.upload(dataURI, {
-        public_id: filename.replace(/\.[^/.]+$/, ''), // إزالة الامتداد
+        public_id: publicId,
         resource_type: 'auto',
         overwrite: true
       });
 
-      console.log(`✅ File uploaded to Cloudinary: ${filename}`);
+      console.log(`✅ Uploaded: ${publicId}`);
 
       return {
-        url: result.secure_url
+        url: result.secure_url,
+        name: safeName
       };
-    } catch (error) {
-      console.error('❌ Error creating file in Cloudinary:', error);
-      throw error;
+    } catch (err) {
+      console.error('❌ Cloudinary createFile:', err);
+      throw err;
     }
   }
 
+  /* ---------- delete ---------- */
   async deleteFile(config, filename) {
     try {
-      const publicId = filename.replace(/\.[^/.]+$/, '');
+      const publicId = this._publicId(filename);
       await this.cloudinary.uploader.destroy(publicId);
-      console.log(`✅ File deleted from Cloudinary: ${filename}`);
-    } catch (error) {
-      console.error('❌ Error deleting file from Cloudinary:', error);
-      throw error;
+      console.log(`🗑️ Deleted: ${publicId}`);
+    } catch (err) {
+      console.warn('⚠️ Delete ignored:', err.message);
     }
   }
 
-  async getFileData(filename) {
-    try {
-      const publicId = filename.replace(/\.[^/.]+$/, '');
-      const resource = await this.cloudinary.api.resource(publicId);
-      
-      // احصل على البيانات من URL
-      const response = await fetch(resource.secure_url);
-      return await response.buffer();
-    } catch (error) {
-      console.error('❌ Error getting file data from Cloudinary:', error);
-      throw error;
-    }
-  }
-
+  /* ---------- location ---------- */
   async getFileLocation(config, filename) {
     try {
-      const publicId = filename.replace(/\.[^/.]+$/, '');
-      const resource = await this.cloudinary.api.resource(publicId);
-      return resource.secure_url;
-    } catch (error) {
-      console.error('❌ Error getting file location from Cloudinary:', error);
-      throw error;
+      const publicId = this._publicId(filename);
+      const res = await this.cloudinary.api.resource(publicId);
+      return res.secure_url;
+    } catch (err) {
+      if (err.http_code === 404) return null;
+      throw err;
     }
   }
-}
 
-/* ===============================
-   Firebase Push (معطّل)
-   =============================== */
-let pushConfig = undefined;
-console.log('⚠️ Firebase Push disabled — running without push notifications');
+  /* ---------- data ---------- */
+  async getFileData(filename) {
+    const url = await this.getFileLocation(null, filename);
+    if (!url) return null;
+
+    return new Promise((resolve, reject) => {
+      https.get(url, res => {
+        const chunks = [];
+        res.on('data', d => chunks.push(d));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+      }).on('error', reject);
+    });
+  }
+}
 
 /* ===============================
    Parse Server Configuration
@@ -126,12 +135,11 @@ const parseServer = new ParseServer({
 
   databaseURI: process.env.DATABASE_URI,
 
-  serverURL: process.env.SERVER_URL,        // يجب أن يكون HTTPS
-  publicServerURL: process.env.SERVER_URL, // مهم للداش بورد
+  serverURL: process.env.SERVER_URL,
+  publicServerURL: process.env.SERVER_URL,
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  /* =============================== Cloudinary Files Adapter =============================== */
   filesAdapter: new CloudinaryFilesAdapter(),
 
   liveQuery: {
@@ -139,12 +147,8 @@ const parseServer = new ParseServer({
     redisURL: process.env.REDIS_URL
   },
 
-  /* =============================== Permissions & Security =============================== */
   allowClientClassCreation: true,
   allowCustomObjectId: true,
-  enforcePrivateUsers: false,
-  allowUserPasswordReset: true,
-  allowExpiredAuthDataToken: true,
 
   defaultLimit: 100,
   maxLimit: 1000,
@@ -152,7 +156,7 @@ const parseServer = new ParseServer({
   graphQLPath: '/graphql',
   graphQLPlaygroundPath: '/graphql-playground',
 
-  push: pushConfig,
+  push: undefined,
   logLevel: process.env.LOG_LEVEL || 'info'
 });
 
@@ -162,15 +166,11 @@ const parseServer = new ParseServer({
 app.use('/parse', parseServer);
 
 /* ===============================
-   Parse Dashboard (الحل الجذري)
+   Parse Dashboard
    =============================== */
-
-// ⭐ static خاص بالداش بورد (مهم جدًا)
 app.use(
   '/dashboard',
-  express.static(
-    path.join(__dirname, 'node_modules/parse-dashboard/public')
-  )
+  express.static(path.join(__dirname, 'node_modules/parse-dashboard/public'))
 );
 
 const dashboard = new ParseDashboard(
@@ -180,7 +180,7 @@ const dashboard = new ParseDashboard(
         serverURL: process.env.SERVER_URL,
         appId: process.env.APP_ID,
         masterKey: process.env.MASTER_KEY,
-        appName: process.env.APP_NAME || 'MyParseApp'
+        appName: process.env.APP_NAME || 'Parse App'
       }
     ],
     users: [
@@ -190,18 +190,10 @@ const dashboard = new ParseDashboard(
       }
     ]
   },
-  {
-    allowInsecureHTTP: false
-  }
+  { allowInsecureHTTP: false }
 );
 
 app.use('/dashboard', dashboard);
-
-/* ===============================
-   HTTP + LiveQuery Server
-   =============================== */
-const httpServer = http.createServer(app);
-ParseServer.createLiveQueryServer(httpServer);
 
 /* ===============================
    Health Check
@@ -209,47 +201,34 @@ ParseServer.createLiveQueryServer(httpServer);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
-    filesAdapter: 'Cloudinary ☁️',
-    storage: '25 GB Free',
-    permissions: 'Enabled ✅',
-    liveQuery: 'Enabled ✅'
+    storage: 'Cloudinary',
+    liveQuery: true,
+    time: new Date().toISOString()
   });
 });
 
 /* ===============================
-   Error Handling
-   =============================== */
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
-  res.status(500).json({ error: 'Internal Server Error' });
-});
-
-/* ===============================
-   Start Server
+   Server
    =============================== */
 const PORT = process.env.PORT || 1337;
+const httpServer = http.createServer(app);
+ParseServer.createLiveQueryServer(httpServer);
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log('════════════════════════════════════');
-  console.log('✅ Parse Server 4.10.4 Running');
+  console.log('══════════════════════════════════');
+  console.log('✅ Parse Server Running');
   console.log(`📍 ${process.env.SERVER_URL}`);
   console.log('📊 Dashboard: /dashboard');
-  console.log('☁️  Files: Cloudinary Storage (25 GB Free)');
-  console.log('📡 Live Query: Enabled');
-  console.log('🔐 Permissions: Enabled');
-  console.log('════════════════════════════════════');
+  console.log('☁️  Files: Cloudinary');
+  console.log('══════════════════════════════════');
 });
 
 /* ===============================
-   Process Safety
+   Safety
    =============================== */
-process.on('unhandledRejection', (reason) => {
-  console.error('❌ Unhandled Rejection:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+process.on('unhandledRejection', r => console.error('❌ Unhandled:', r));
+process.on('uncaughtException', e => {
+  console.error('❌ Crash:', e);
   process.exit(1);
 });
 
