@@ -19,15 +19,11 @@ app.use(express.urlencoded({ extended: true }));
 /* =============================== Static Files =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
-/* =============================== Parse Server Configuration =============================== */
-// ✅ الحل الفوري: بدون محول ملفات خارجي
-// Parse Server سيستخدم المحول الافتراضي
+/* =============================== Parse Server =============================== */
 const parseServer = new ParseServer({
   appId: process.env.APP_ID || 'myAppId',
   masterKey: process.env.MASTER_KEY || 'myMasterKey',
   clientKey: process.env.CLIENT_KEY || 'myClientKey',
-  fileKey: process.env.FILE_KEY,
-  restAPIKey: process.env.REST_API_KEY,
 
   databaseURI: process.env.DATABASE_URI,
 
@@ -36,31 +32,33 @@ const parseServer = new ParseServer({
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  // ❌ لا نستخدم filesAdapter - سيستخدم المحول الافتراضي
-  // هذا يحل مشكلة بيانات AWS غير الصحيحة
-
-  /* =============================== LiveQuery =============================== */
-  liveQuery: { 
-    classNames: ['*'], 
-    redisURL: process.env.REDIS_URL 
-  },
-
+  /* 🔥 السماح المطلق */
   allowClientClassCreation: true,
+  allowClientClassUpdate: true,
   allowCustomObjectId: true,
+  enableAnonymousUsers: true,
+
+  /* 🔥 تعطيل حماية السكيمة */
+  disableSchemaHooks: true,
+  schemaCacheTTL: 0,
+
+  /* 🔥 إجبار استخدام masterKey داخليًا */
+  useMasterKeyForQuery: true,
 
   defaultLimit: 100,
   maxLimit: 1000,
 
-  graphQLPath: '/graphql',
-  graphQLPlaygroundPath: '/graphql-playground',
+  liveQuery: {
+    classNames: ['*']
+  },
 
-  logLevel: process.env.LOG_LEVEL || 'info'
+  logLevel: 'verbose'
 });
 
-/* =============================== Mount Parse API =============================== */
+/* =============================== Mount Parse =============================== */
 app.use('/parse', parseServer);
 
-/* =============================== Parse Dashboard =============================== */
+/* =============================== Dashboard =============================== */
 const dashboard = new ParseDashboard(
   {
     apps: [
@@ -68,14 +66,11 @@ const dashboard = new ParseDashboard(
         serverURL: process.env.SERVER_URL || 'http://localhost:1337/parse',
         appId: process.env.APP_ID || 'myAppId',
         masterKey: process.env.MASTER_KEY || 'myMasterKey',
-        appName: process.env.APP_NAME || 'Parse Server'
+        appName: 'Parse Server'
       }
     ],
     users: [
-      { 
-        user: process.env.DASHBOARD_USER || 'admin', 
-        pass: process.env.DASHBOARD_PASS || 'admin123' 
-      }
+      { user: 'admin', pass: 'admin123' }
     ]
   },
   { allowInsecureHTTP: true }
@@ -83,45 +78,29 @@ const dashboard = new ParseDashboard(
 
 app.use('/dashboard', dashboard);
 
-/* =============================== HTTP + LiveQuery Server =============================== */
+/* =============================== HTTP Server =============================== */
 const httpServer = http.createServer(app);
 ParseServer.createLiveQueryServer(httpServer);
 
-/* =============================== Health Check =============================== */
+/* =============================== Health =============================== */
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    time: new Date().toISOString(),
-    filesAdapter: 'default (built-in)'
+  res.json({
+    status: 'ok',
+    schema: 'unrestricted',
+    userClass: 'editable'
   });
 });
 
-/* =============================== Error Handling =============================== */
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
-  res.status(500).json({ error: 'Internal Server Error' });
-});
-
-/* =============================== Start Server =============================== */
+/* =============================== Start =============================== */
 const PORT = process.env.PORT || 1337;
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log('════════════════════════════════════');
-  console.log('✅ Parse Server 4.10.4 Running');
-  console.log(`📍 API: http://localhost:${PORT}/parse`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard`);
-  console.log('📁 Files: Using default adapter');
-  console.log('════════════════════════════════════');
-});
-
-/* =============================== Process Safety =============================== */
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
+  console.log('================================');
+  console.log('✅ Parse Server RUNNING');
+  console.log('🔓 Schema: OPEN (ALL)');
+  console.log('👤 _User: EDITABLE');
+  console.log(`📍 http://localhost:${PORT}/parse`);
+  console.log('================================');
 });
 
 module.exports = app;
