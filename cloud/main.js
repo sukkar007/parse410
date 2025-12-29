@@ -166,6 +166,10 @@ function getNickname(user) {
 //////////////////////////////////////////////////////////
 // =================== دوال التطبيق الرئيسية ===================
 //////////////////////////////////////////////////////////
+Parse.Cloud.beforeSave(Parse.User, async (request) => {
+  request.context = request.context || {};
+  request.context.useMasterKey = true;
+});
 
 // 1. إرسال إشعار Push
 Parse.Cloud.define('sendPush', async (request) => {
