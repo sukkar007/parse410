@@ -949,6 +949,234 @@ Parse.Cloud.define("getUserStats", async (request) => {
         }
     };
 });
+/**
+ * Parse Cloud Code for Fruit Wheel Game
+ * مخصص للعبة عجلة الفواكه بناءً على تحليل البروتوكولات
+ */
+
+const FruitWheelRound = Parse.Object.extend("FruitWheelRound");
+const FruitWheelBet = Parse.Object.extend("FruitWheelBet");
+
+// إعدادات اللعبة
+const STAGES = {
+    NONE: 0,
+    BET: 1,
+    PREPARE: 2,
+    FINISH: 3
+};
+
+const TIMES = {
+    BET: 30,      // وقت الرهان
+    PREPARE: 5,   // وقت التحضير/الدوران
+    FINISH: 10,   // وقت عرض النتيجة
+    NONE: 2       // وقت الراحة
+};
+
+const FRUIT_RATES = [5, 5, 5, 5, 10, 15, 25, 45]; // مضاعفات الفواكه (0-7)
+
+/**
+ * جلب معلومات اللعبة الحالية
+ */
+Parse.Cloud.define("fruit_game_info", async (request) => {
+    const user = request.user;
+    if (!user) throw new Parse.Error(Parse.Error.SESSION_MISSING, "User not authenticated");
+
+    const now = Math.floor(Date.now() / 1000);
+    
+    // جلب الجولة الحالية أو إنشاء واحدة جديدة
+    let currentRound = await new Parse.Query(FruitWheelRound)
+        .descending("createdAt")
+        .first({ useMasterKey: true });
+
+    if (!currentRound || currentRound.get("endTime") < now) {
+        currentRound = await createNewRound();
+    }
+
+    const stage = currentRound.get("stage");
+    const endTime = currentRound.get("endTime");
+    const leftSeconds = Math.max(0, endTime - now);
+
+    // جلب رصيد المستخدم
+    await user.fetch({ useMasterKey: true });
+    const userCoin = user.get("credit") || 0;
+
+    // جلب سجل النتائج (آخر 20 نتيجة)
+    const historyQuery = new Parse.Query(FruitWheelRound);
+    historyQuery.equalTo("stage", STAGES.FINISH);
+    historyQuery.descending("createdAt");
+    historyQuery.limit(20);
+    const historyRounds = await historyQuery.find({ useMasterKey: true });
+    const history = historyRounds.map(r => r.get("resultId") || 0);
+
+    // جلب رهانات المستخدم في هذه الجولة
+    const userBetsQuery = new Parse.Query(FruitWheelBet);
+    userBetsQuery.equalTo("user", user);
+    userBetsQuery.equalTo("roundId", currentRound.id);
+    const userBets = await userBetsQuery.find({ useMasterKey: true });
+    
+    const myselfBet = [0, 0, 0, 0, 0, 0, 0, 0];
+    userBets.forEach(bet => {
+        myselfBet[bet.get("fruitId")] += bet.get("amount");
+    });
+
+    // جلب إجمالي الرهانات (للمحاكاة أو من البيانات الحقيقية)
+    const totalBet = currentRound.get("totalBets") || [0, 0, 0, 0, 0, 0, 0, 0];
+
+    return {
+        code: 0,
+        data: {
+            stage: stage,
+            roundId: currentRound.id,
+            leftSeconds: leftSeconds,
+            userCoin: userCoin,
+            history: history,
+            myselfBet: myselfBet,
+            totalBet: totalBet
+        }
+    };
+});
+
+/**
+ * وضع رهان
+ */
+Parse.Cloud.define("fruit_game_bet", async (request) => {
+    const user = request.user;
+    if (!user) throw new Parse.Error(Parse.Error.SESSION_MISSING, "User not authenticated");
+
+    const { fruitId, amount } = request.params;
+    if (fruitId < 0 || fruitId > 7 || amount <= 0) {
+        throw new Parse.Error(400, "Invalid bet parameters");
+    }
+
+    // جلب الجولة الحالية
+    const currentRound = await new Parse.Query(FruitWheelRound)
+        .descending("createdAt")
+        .first({ useMasterKey: true });
+
+    if (!currentRound || currentRound.get("stage") !== STAGES.BET) {
+        throw new Parse.Error(400, "Betting is not allowed at this stage");
+    }
+
+    // التحقق من الرصيد
+    await user.fetch({ useMasterKey: true });
+    const balance = user.get("credit") || 0;
+    if (balance < amount) {
+        throw new Parse.Error(10062, "Insufficient balance");
+    }
+
+    // خصم الرصيد
+    user.increment("credit", -amount);
+    await user.save(null, { useMasterKey: true });
+
+    // تسجيل الرهان
+    const bet = new FruitWheelBet();
+    bet.set("user", user);
+    bet.set("roundId", currentRound.id);
+    bet.set("fruitId", fruitId);
+    bet.set("amount", amount);
+    await bet.save(null, { useMasterKey: true });
+
+    // تحديث إجمالي الرهانات في الجولة
+    const totalBets = currentRound.get("totalBets") || [0, 0, 0, 0, 0, 0, 0, 0];
+    totalBets[fruitId] += amount;
+    currentRound.set("totalBets", totalBets);
+    await currentRound.save(null, { useMasterKey: true });
+
+    return {
+        code: 0,
+        roundId: currentRound.id,
+        fruitId: fruitId,
+        amount: amount,
+        newBalance: user.get("credit")
+    };
+});
+
+/**
+ * وظيفة داخلية لإنشاء جولة جديدة
+ */
+async function createNewRound() {
+    const now = Math.floor(Date.now() / 1000);
+    const round = new FruitWheelRound();
+    round.set("stage", STAGES.BET);
+    round.set("startTime", now);
+    round.set("endTime", now + TIMES.BET);
+    round.set("totalBets", [0, 0, 0, 0, 0, 0, 0, 0]);
+    return await round.save(null, { useMasterKey: true });
+}
+
+/**
+ * وظيفة خلفية (Job) لتحديث مراحل اللعبة وتوزيع الأرباح
+ * يجب تشغيلها كل ثانية أو استخدام نظام Cron
+ */
+Parse.Cloud.define("fruit_game_tick", async (request) => {
+    const now = Math.floor(Date.now() / 1000);
+    
+    let currentRound = await new Parse.Query(FruitWheelRound)
+        .descending("createdAt")
+        .first({ useMasterKey: true });
+
+    if (!currentRound) {
+        await createNewRound();
+        return "New round created";
+    }
+
+    const stage = currentRound.get("stage");
+    const endTime = currentRound.get("endTime");
+
+    if (now >= endTime) {
+        if (stage === STAGES.BET) {
+            // الانتقال لمرحلة التحضير
+            currentRound.set("stage", STAGES.PREPARE);
+            currentRound.set("endTime", now + TIMES.PREPARE);
+        } 
+        else if (stage === STAGES.PREPARE) {
+            // الانتقال لمرحلة النتيجة وتوزيع الأرباح
+            const resultId = Math.floor(Math.random() * 8);
+            currentRound.set("stage", STAGES.FINISH);
+            currentRound.set("resultId", resultId);
+            currentRound.set("endTime", now + TIMES.FINISH);
+            
+            // توزيع الأرباح
+            await distributeWinnings(currentRound.id, resultId);
+        }
+        else if (stage === STAGES.FINISH) {
+            // الانتقال لمرحلة الراحة
+            currentRound.set("stage", STAGES.NONE);
+            currentRound.set("endTime", now + TIMES.NONE);
+        }
+        else {
+            // إنشاء جولة جديدة
+            await createNewRound();
+            return "New round started";
+        }
+        await currentRound.save(null, { useMasterKey: true });
+    }
+    
+    return "Tick processed";
+});
+
+async function distributeWinnings(roundId, resultId) {
+    const betsQuery = new Parse.Query(FruitWheelBet);
+    betsQuery.equalTo("roundId", roundId);
+    betsQuery.equalTo("fruitId", resultId);
+    const winningBets = await betsQuery.find({ useMasterKey: true });
+
+    const rate = FRUIT_RATES[resultId];
+
+    for (const bet of winningBets) {
+        const user = bet.get("user");
+        const winAmount = bet.get("amount") * rate;
+        
+        // إضافة الأرباح للمستخدم
+        const userObj = await new Parse.Query(Parse.User).get(user.id, { useMasterKey: true });
+        userObj.increment("credit", winAmount);
+        await userObj.save(null, { useMasterKey: true });
+        
+        // تحديث الرهان كفائز
+        bet.set("winAmount", winAmount);
+        await bet.save(null, { useMasterKey: true });
+    }
+}
 
 // تحديث صورة الملف الشخصي
 Parse.Cloud.define("updateAvatar", async (request) => {
