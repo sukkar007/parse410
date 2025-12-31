@@ -3,6 +3,7 @@ const { ParseServer } = require('parse-server');
 const ParseDashboard = require('parse-dashboard');
 const http = require('http');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
 
@@ -12,10 +13,65 @@ const app = express();
 app.set('trust proxy', 1);
 
 /* ===============================
+   CORS Configuration
+   =============================== */
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://frococs.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:8080',
+      'http://localhost:5173'
+    ];
+    
+    // السماح بالطلبات بدون origin (مثل من الهاتف)
+    if (!origin || allowedOrigins.includes(origin) || origin.includes('onrender.com')) {
+      callback(null, true);
+    } else {
+      console.warn('❌ CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'X-Parse-Application-Id',
+    'X-Parse-Master-Key',
+    'X-Parse-Session-Token',
+    'X-Parse-REST-API-Key',
+    'X-Parse-Client-Key',
+    'Authorization'
+  ],
+  exposedHeaders: [
+    'X-Parse-Application-Id',
+    'X-Parse-Session-Token'
+  ],
+  maxAge: 86400
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+/* ===============================
    Middleware
    =============================== */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+/* ===============================
+   Request Logging
+   =============================== */
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    console.log(`📊 [${req.method}] ${req.url} - ${res.statusCode} - ${duration}ms`);
+  });
+  
+  next();
+});
 
 /* ===============================
    Static Files لموقعك فقط
@@ -122,7 +178,34 @@ ParseServer.createLiveQueryServer(httpServer);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+/* ===============================
+   Server Info
+   =============================== */
+app.get('/api/server-info', (req, res) => {
+  res.json({
+    name: process.env.APP_NAME || 'Parse Server',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'production',
+    serverURL: process.env.SERVER_URL,
+    corsEnabled: true
+  });
+});
+
+/* ===============================
+   404 Handler
+   =============================== */
+app.use((req, res) => {
+  console.warn('⚠️ 404 Not Found:', req.url);
+  res.status(404).json({
+    code: 404,
+    message: 'Not Found',
+    url: req.url
   });
 });
 
@@ -130,8 +213,26 @@ app.get('/health', (req, res) => {
    Error Handling
    =============================== */
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal Server Error' });
+  console.error('❌ Server Error:', {
+    message: err.message,
+    url: req.url,
+    method: req.method,
+    origin: req.get('origin'),
+    timestamp: new Date().toISOString()
+  });
+
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      code: 403,
+      message: 'CORS policy violation',
+      error: err.message
+    });
+  }
+
+  res.status(err.status || 500).json({
+    code: err.status || 500,
+    message: err.message || 'Internal Server Error'
+  });
 });
 
 /* ===============================
@@ -144,6 +245,10 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('✅ Parse Server 4.10.4 Running');
   console.log(`📍 ${process.env.SERVER_URL}`);
   console.log('📊 Dashboard: /dashboard');
+  console.log('🌐 CORS: Enabled');
+  console.log('════════════════════════════════════');
+  console.log('🔍 Health Check: /health');
+  console.log('🔍 Server Info: /api/server-info');
   console.log('════════════════════════════════════');
 });
 
@@ -151,12 +256,28 @@ httpServer.listen(PORT, '0.0.0.0', () => {
    Process Safety
    =============================== */
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
+  console.error('❌ Unhandled Rejection:', reason);
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+  console.error('❌ Uncaught Exception:', error);
   process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  console.log('🔴 SIGTERM signal received: closing HTTP server');
+  httpServer.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🔴 SIGINT signal received: closing HTTP server');
+  httpServer.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
