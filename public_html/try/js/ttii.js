@@ -352,7 +352,7 @@ function showResult(result, topList, winGold, avatar) {
             
             var selfImg = $(".prize .self img")[0];
             if (selfImg) {
-                selfImg.src = "images/default_avatar.png";
+                selfImg.src = "https://parse410.onrender.com/try/images/default_avatar.png";
             }
         }
         
@@ -635,9 +635,9 @@ function fixImageUrl(url) {
 function getGiftImagePath(fruitNumber) {
     if (!fruitNumber || fruitNumber < 1 || fruitNumber > 8) {
         console.warn("Invalid fruit number:", fruitNumber);
-        return 'images/gift_1.png';
+        return 'https://parse410.onrender.com/try/images/gift_1.png';
     }
-    return 'images/gift_' + fruitNumber + '.png';
+    return 'https://parse410.onrender.com/try/images/gift_' + fruitNumber + '.png';
 }
 
 function formatNumber(num) {
@@ -830,7 +830,7 @@ function getInfo(_round, isChoice) {
                     giftListHtml +=
                         '<div class="giftItem"><img src="' +
                         getGiftImagePath(fruitNumber) +
-                        '" alt=""><img src="images/new.png" alt=""></div>';
+                        '" alt=""><img src="https://parse410.onrender.com/try/images/new.png" alt=""></div>';
                     console.log("✅ Added latest result with 'new' badge");
                 } else {
                     giftListHtml +=
