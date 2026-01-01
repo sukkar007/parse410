@@ -1,6 +1,3 @@
-// Parse Cloud Code - Main Application
-// ==========================================
-
 const OneSignal = require('@onesignal/node-onesignal');
 
 // OneSignal config
