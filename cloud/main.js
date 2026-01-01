@@ -24,6 +24,418 @@ const client = new OneSignal.DefaultApi(configuration);
 /**
  * استخراج رابط الصورة من بيانات Parse File - محسنة
  */
+/**
+ * Parse Cloud Functions - Soccer/Dice Game
+ * ==========================================
+ * Backend متكامل للعبة الأولى (Soccer/Dice)
+ * بنفس طريقة عمل اللعبة الثانية (Fruit Wheel)
+ */
+
+// =================== الثوابت والإعدادات ===================
+
+const GAME_TYPES = {
+  SOCCER: 'soccer',
+  DICE: 'dice'
+};
+
+const SOCCER_ODDS = {
+  team_a: 1.8,
+  team_b: 2.0,
+  draw: 3.5
+};
+
+const DICE_ODDS = {
+  1: 5.0,
+  2: 5.0,
+  3: 5.0,
+  4: 5.0,
+  5: 5.0,
+  6: 5.0
+};
+
+const GAME_DURATION = 60; // ثانية
+
+// =================== دوال المساعدة ===================
+
+/**
+ * التحقق من المصادقة
+ */
+function checkAuth(request) {
+  const user = request.user;
+  if (!user) {
+    throw new Parse.Error(Parse.Error.SESSION_MISSING, 'User not authenticated');
+  }
+  return user;
+}
+
+/**
+ * الحصول على معلومات المستخدم
+ */
+async function getUserInfo(user) {
+  try {
+    await user.fetch({ useMasterKey: true });
+    return {
+      objectId: user.id,
+      username: user.get('username'),
+      email: user.get('email'),
+      avatar: user.get('avatar'),
+      credits: user.get('credit') || 0,
+      diamonds: user.get('diamonds') || 0,
+      totalWins: user.get('totalWins') || 0,
+      totalLosses: user.get('totalLosses') || 0,
+      totalBets: user.get('totalBets') || 0,
+    };
+  } catch (e) {
+    console.error('❌ Error getting user info:', e);
+    throw e;
+  }
+}
+
+/**
+ * حساب رقم عشوائي للنرد
+ */
+function getRandomDiceResult() {
+  return Math.floor(Math.random() * 6) + 1;
+}
+
+/**
+ * حساب نتيجة مباراة كرة قدم عشوائية
+ */
+function getRandomSoccerResult() {
+  const rand = Math.random();
+  if (rand < 0.4) return 'team_a';
+  if (rand < 0.8) return 'team_b';
+  return 'draw';
+}
+
+// =================== دوال اللعبة الرئيسية ===================
+
+/**
+ * جلب معلومات اللعبة الحالية
+ */
+Parse.Cloud.define('game_sc_information', async (request) => {
+  try {
+    const user = checkAuth(request);
+    
+    console.log(`🎮 [Game1] game_sc_information requested by user: ${user.id}`);
+
+    // جلب بيانات المستخدم
+    const userInfo = await getUserInfo(user);
+
+    // حساب الجولة الحالية
+    const currentTime = Math.floor(Date.now() / 1000);
+    const currentRound = Math.floor(currentTime / GAME_DURATION);
+    const roundStartTime = currentRound * GAME_DURATION;
+    const roundEndTime = roundStartTime + GAME_DURATION;
+    const countdown = Math.max(0, roundEndTime - currentTime);
+
+    // محاكاة معلومات اللعبة
+    const gameInfo = {
+      code: 200,
+      message: 'Success',
+      data: {
+        userId: userInfo.objectId,
+        username: userInfo.username,
+        avatar: userInfo.avatar,
+        balance: userInfo.credits,
+        totalWins: userInfo.totalWins,
+        totalLosses: userInfo.totalLosses,
+        
+        // معلومات اللعبة الحالية
+        gameId: `game_${currentRound}`,
+        gameType: GAME_TYPES.SOCCER,
+        status: countdown > 5 ? 'betting' : 'closing',
+        countdown: countdown,
+        
+        // فريق كرة القدم
+        teams: [
+          {
+            teamId: 'team_a',
+            teamName: 'Team A',
+            odds: SOCCER_ODDS.team_a,
+            totalBets: Math.floor(Math.random() * 5000) + 1000
+          },
+          {
+            teamId: 'team_b',
+            teamName: 'Team B',
+            odds: SOCCER_ODDS.team_b,
+            totalBets: Math.floor(Math.random() * 5000) + 1000
+          },
+          {
+            teamId: 'draw',
+            teamName: 'Draw',
+            odds: SOCCER_ODDS.draw,
+            totalBets: Math.floor(Math.random() * 2000) + 500
+          }
+        ],
+        
+        // آخر 5 نتائج
+        resultHistory: ['team_a', 'team_b', 'draw', 'team_a', 'team_b'],
+        
+        // رهانات المستخدم الحالية
+        myBets: {
+          team_a: 0,
+          team_b: 0,
+          draw: 0
+        }
+      }
+    };
+
+    console.log('✅ [Game1] game_sc_information response sent');
+    return gameInfo;
+  } catch (e) {
+    console.error('❌ [Game1] Error in game_sc_information:', e);
+    throw new Parse.Error(Parse.Error.SCRIPT_FAILED, 'Game info error: ' + e.message);
+  }
+});
+
+/**
+ * وضع رهان في اللعبة
+ */
+Parse.Cloud.define('game_bet', async (request) => {
+  try {
+    const user = checkAuth(request);
+    const { gameId, choice, amount } = request.params;
+
+    console.log(`💰 [Game1] game_bet: user=${user.id}, choice=${choice}, amount=${amount}`);
+
+    // التحقق من المعاملات
+    if (!gameId || !choice || !amount || amount <= 0) {
+      throw new Parse.Error(400, 'Invalid parameters');
+    }
+
+    // جلب بيانات المستخدم
+    await user.fetch({ useMasterKey: true });
+    const currentCredits = user.get('credit') || 0;
+
+    // التحقق من الرصيد
+    if (currentCredits < amount) {
+      console.error(`❌ [Game1] Insufficient credits: ${currentCredits} < ${amount}`);
+      throw new Parse.Error(400, 'Insufficient balance');
+    }
+
+    // خصم الرصيد
+    user.increment('credit', -amount);
+    user.increment('totalBets', amount);
+    await user.save(null, { useMasterKey: true });
+
+    // محاكاة نتيجة اللعبة
+    const gameResult = choice.includes('dice') ? getRandomDiceResult() : getRandomSoccerResult();
+    const isWin = gameResult === choice;
+    
+    // حساب الربح
+    const odds = SOCCER_ODDS[choice] || DICE_ODDS[choice] || 1.5;
+    const winAmount = isWin ? Math.floor(amount * odds) : 0;
+    const newBalance = currentCredits - amount + winAmount;
+
+    // تحديث إحصائيات المستخدم
+    user.set('credit', newBalance);
+    if (isWin) {
+      user.increment('totalWins', 1);
+    } else {
+      user.increment('totalLosses', 1);
+    }
+    await user.save(null, { useMasterKey: true });
+
+    // تسجيل الرهان
+    const BetLog = Parse.Object.extend('BetLog');
+    const betLog = new BetLog();
+    betLog.set('user', user);
+    betLog.set('gameId', gameId);
+    betLog.set('choice', choice);
+    betLog.set('amount', amount);
+    betLog.set('result', gameResult);
+    betLog.set('isWin', isWin);
+    betLog.set('winAmount', winAmount);
+    betLog.set('newBalance', newBalance);
+    await betLog.save(null, { useMasterKey: true });
+
+    const response = {
+      code: 200,
+      message: 'Bet placed successfully',
+      data: {
+        betId: betLog.id,
+        result: gameResult,
+        isWin: isWin,
+        winAmount: winAmount,
+        newBalance: newBalance,
+        message: isWin ? 'You won!' : 'You lost!'
+      }
+    };
+
+    console.log('✅ [Game1] game_bet response:', response);
+    return response;
+  } catch (e) {
+    console.error('❌ [Game1] Error in game_bet:', e);
+    throw new Parse.Error(Parse.Error.SCRIPT_FAILED, 'Bet error: ' + e.message);
+  }
+});
+
+/**
+ * جلب سجل الرهانات
+ */
+Parse.Cloud.define('game_sc_history', async (request) => {
+  try {
+    const user = checkAuth(request);
+
+    console.log(`📋 [Game1] game_sc_history requested by user: ${user.id}`);
+
+    // جلب سجل الرهانات
+    const BetLog = Parse.Object.extend('BetLog');
+    const query = new Parse.Query(BetLog);
+    query.equalTo('user', user);
+    query.descending('createdAt');
+    query.limit(20);
+    const bets = await query.find({ useMasterKey: true });
+
+    const betHistory = bets.map(bet => ({
+      betId: bet.id,
+      gameId: bet.get('gameId'),
+      choice: bet.get('choice'),
+      amount: bet.get('amount'),
+      result: bet.get('result'),
+      isWin: bet.get('isWin'),
+      winAmount: bet.get('winAmount'),
+      date: bet.createdAt.getTime(),
+    }));
+
+    const response = {
+      code: 200,
+      message: 'Success',
+      data: {
+        bets: betHistory
+      }
+    };
+
+    console.log('✅ [Game1] game_sc_history response sent');
+    return response;
+  } catch (e) {
+    console.error('❌ [Game1] Error in game_sc_history:', e);
+    throw new Parse.Error(Parse.Error.SCRIPT_FAILED, 'History error: ' + e.message);
+  }
+});
+
+/**
+ * جلب ترتيب اللاعبين
+ */
+Parse.Cloud.define('game_sc_ranking', async (request) => {
+  try {
+    const user = checkAuth(request);
+
+    console.log(`🏆 [Game1] game_sc_ranking requested by user: ${user.id}`);
+
+    // جلب أفضل اللاعبين
+    const topPlayersQuery = new Parse.Query(Parse.User);
+    topPlayersQuery.descending('totalWins');
+    topPlayersQuery.limit(10);
+    const topPlayers = await topPlayersQuery.find({ useMasterKey: true });
+
+    const ranking = topPlayers.map((player, index) => ({
+      rank: index + 1,
+      username: player.get('username'),
+      avatar: player.get('avatar'),
+      totalWins: player.get('totalWins') || 0,
+      totalLosses: player.get('totalLosses') || 0,
+      balance: player.get('credit') || 0,
+      winRate: player.get('totalWins') ? 
+        ((player.get('totalWins') / (player.get('totalWins') + player.get('totalLosses'))) * 100).toFixed(2) : 0
+    }));
+
+    const response = {
+      code: 200,
+      message: 'Success',
+      data: {
+        ranking: ranking
+      }
+    };
+
+    console.log('✅ [Game1] game_sc_ranking response sent');
+    return response;
+  } catch (e) {
+    console.error('❌ [Game1] Error in game_sc_ranking:', e);
+    throw new Parse.Error(Parse.Error.SCRIPT_FAILED, 'Ranking error: ' + e.message);
+  }
+});
+
+/**
+ * جلب ملف تعريف المستخدم
+ */
+Parse.Cloud.define('game_sc_profile', async (request) => {
+  try {
+    const user = checkAuth(request);
+
+    console.log(`👤 [Game1] game_sc_profile requested by user: ${user.id}`);
+
+    const userInfo = await getUserInfo(user);
+
+    const response = {
+      code: 200,
+      message: 'Success',
+      data: userInfo
+    };
+
+    console.log('✅ [Game1] game_sc_profile response sent');
+    return response;
+  } catch (e) {
+    console.error('❌ [Game1] Error in game_sc_profile:', e);
+    throw new Parse.Error(Parse.Error.SCRIPT_FAILED, 'Profile error: ' + e.message);
+  }
+});
+
+/**
+ * تحديث الرصيد
+ */
+Parse.Cloud.define('updateBalance', async (request) => {
+  try {
+    const user = checkAuth(request);
+    const { amount } = request.params;
+
+    if (amount === undefined || amount === null) {
+      throw new Parse.Error(400, 'amount is required');
+    }
+
+    console.log(`💵 [Game1] updateBalance: user=${user.id}, amount=${amount}`);
+
+    // جلب بيانات المستخدم
+    await user.fetch({ useMasterKey: true });
+
+    // تحديث الرصيد
+    const currentCredits = user.get('credit') || 0;
+    const newBalance = currentCredits + amount;
+
+    user.set('credit', newBalance);
+    await user.save(null, { useMasterKey: true });
+
+    const response = {
+      code: 200,
+      message: 'Balance updated successfully',
+      data: {
+        newBalance: newBalance
+      }
+    };
+
+    console.log('✅ [Game1] updateBalance response sent');
+    return response;
+  } catch (e) {
+    console.error('❌ [Game1] Error in updateBalance:', e);
+    throw new Parse.Error(Parse.Error.SCRIPT_FAILED, 'Update balance error: ' + e.message);
+  }
+});
+
+/**
+ * اختبار الاتصال
+ */
+Parse.Cloud.define('ping', async (request) => {
+  console.log('🏓 [Game1] Ping received');
+  return {
+    code: 200,
+    message: 'Pong!',
+    timestamp: new Date().getTime()
+  };
+});
+
+console.log('✅ [Game1] All game functions loaded successfully');
+
 function getImageUrl(avatarData) {
     console.log("🔍 getImageUrl called with:", typeof avatarData, avatarData);
     
