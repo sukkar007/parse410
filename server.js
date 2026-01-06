@@ -5,6 +5,14 @@ const http = require('http');
 const path = require('path');
 const cors = require('cors');
 
+/* ===============================
+   S3 Files Adapter
+   =============================== */
+const S3Adapter = require('@parse/s3-files-adapter');
+
+/* ===============================
+   Initialize Express
+   =============================== */
 const app = express();
 
 /* ===============================
@@ -23,8 +31,7 @@ const corsOptions = {
       'http://localhost:8080',
       'http://localhost:5173'
     ];
-    
-    // السماح بالطلبات بدون origin (مثل من الهاتف)
+
     if (!origin || allowedOrigins.includes(origin) || origin.includes('onrender.com')) {
       callback(null, true);
     } else {
@@ -64,18 +71,15 @@ app.use(express.urlencoded({ extended: true }));
    =============================== */
 app.use((req, res, next) => {
   const startTime = Date.now();
-  
   res.on('finish', () => {
     const duration = Date.now() - startTime;
     console.log(`📊 [${req.method}] ${req.url} - ${res.statusCode} - ${duration}ms`);
   });
-  
   next();
 });
 
 /* ===============================
    Static Files لموقعك فقط
-   (بدون تعارض مع Dashboard)
    =============================== */
 app.use('/', express.static(path.join(__dirname, 'public_html')));
 
@@ -84,6 +88,19 @@ app.use('/', express.static(path.join(__dirname, 'public_html')));
    =============================== */
 let pushConfig = undefined;
 console.log('⚠️ Firebase Push disabled — running without push notifications');
+
+/* ===============================
+   S3 Adapter Configuration
+   =============================== */
+const s3Adapter = new S3Adapter(
+  process.env.AWS_ACCESS_KEY_ID,
+  process.env.AWS_SECRET_ACCESS_KEY,
+  process.env.AWS_BUCKET,
+  {
+    region: process.env.AWS_REGION || 'ap-southeast-1',
+    directAccess: false // false = الوصول عبر Parse API
+  }
+);
 
 /* ===============================
    Parse Server Configuration
@@ -97,15 +114,12 @@ const parseServer = new ParseServer({
 
   databaseURI: process.env.DATABASE_URI,
 
-  serverURL: process.env.SERVER_URL,        // يجب أن يكون HTTPS
-  publicServerURL: process.env.SERVER_URL, // مهم للداش بورد
+  serverURL: process.env.SERVER_URL,
+  publicServerURL: process.env.SERVER_URL,
 
   cloud: path.join(__dirname, 'cloud/main.js'),
 
-  filesAdapter: {
-    module: '@parse/fs-files-adapter',
-    params: { filesSubDir: 'files' }
-  },
+  filesAdapter: s3Adapter, // 🔹 استخدم S3 Adapter
 
   liveQuery: {
     classNames: ['*'],
@@ -131,15 +145,11 @@ const parseServer = new ParseServer({
 app.use('/parse', parseServer);
 
 /* ===============================
-   Parse Dashboard (الحل الجذري)
+   Parse Dashboard
    =============================== */
-
-// ⭐ static خاص بالداش بورد (مهم جدًا)
 app.use(
   '/dashboard',
-  express.static(
-    path.join(__dirname, 'node_modules/parse-dashboard/public')
-  )
+  express.static(path.join(__dirname, 'node_modules/parse-dashboard/public'))
 );
 
 const dashboard = new ParseDashboard(
@@ -159,9 +169,7 @@ const dashboard = new ParseDashboard(
       }
     ]
   },
-  {
-    allowInsecureHTTP: false
-  }
+  { allowInsecureHTTP: false }
 );
 
 app.use('/dashboard', dashboard);
@@ -202,11 +210,7 @@ app.get('/api/server-info', (req, res) => {
    =============================== */
 app.use((req, res) => {
   console.warn('⚠️ 404 Not Found:', req.url);
-  res.status(404).json({
-    code: 404,
-    message: 'Not Found',
-    url: req.url
-  });
+  res.status(404).json({ code: 404, message: 'Not Found', url: req.url });
 });
 
 /* ===============================
@@ -222,24 +226,16 @@ app.use((err, req, res, next) => {
   });
 
   if (err.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      code: 403,
-      message: 'CORS policy violation',
-      error: err.message
-    });
+    return res.status(403).json({ code: 403, message: 'CORS policy violation', error: err.message });
   }
 
-  res.status(err.status || 500).json({
-    code: err.status || 500,
-    message: err.message || 'Internal Server Error'
-  });
+  res.status(err.status || 500).json({ code: err.status || 500, message: err.message || 'Internal Server Error' });
 });
 
 /* ===============================
    Start Server
    =============================== */
 const PORT = process.env.PORT || 1337;
-
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('════════════════════════════════════');
   console.log('✅ Parse Server 4.10.4 Running');
@@ -255,29 +251,9 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 /* ===============================
    Process Safety
    =============================== */
-process.on('unhandledRejection', (reason) => {
-  console.error('❌ Unhandled Rejection:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  process.exit(1);
-});
-
-process.on('SIGTERM', () => {
-  console.log('🔴 SIGTERM signal received: closing HTTP server');
-  httpServer.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('🔴 SIGINT signal received: closing HTTP server');
-  httpServer.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
-});
+process.on('unhandledRejection', (reason) => console.error('❌ Unhandled Rejection:', reason));
+process.on('uncaughtException', (error) => { console.error('❌ Uncaught Exception:', error); process.exit(1); });
+process.on('SIGTERM', () => { console.log('🔴 SIGTERM received'); httpServer.close(() => process.exit(0)); });
+process.on('SIGINT', () => { console.log('🔴 SIGINT received'); httpServer.close(() => process.exit(0)); });
 
 module.exports = app;
