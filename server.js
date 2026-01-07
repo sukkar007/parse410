@@ -98,7 +98,7 @@ const s3Adapter = new S3Adapter(
   process.env.AWS_BUCKET,
   {
     region: process.env.AWS_REGION || 'ap-southeast-1',
-    directAccess: false // false = الوصول عبر Parse API
+    directAccess: true // false = الوصول عبر Parse API
   }
 );
 
