@@ -108,6 +108,7 @@ const s3Adapter = new S3Adapter(
 const parseServer = new ParseServer({
   appId: process.env.APP_ID,
   masterKey: process.env.MASTER_KEY,
+  javascriptKey: process.env.JAVASCRIPT_KEY,  // 🔹 هذا هو مفتاح JS
   clientKey: process.env.CLIENT_KEY,
   fileKey: process.env.FILE_KEY,
   restAPIKey: process.env.REST_API_KEY,
