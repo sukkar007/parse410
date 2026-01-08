@@ -21,6 +21,168 @@ const client = new OneSignal.DefaultApi(configuration);
 // =================== نظام الربحية ===================
 //////////////////////////////////////////////////////////
 
+// ==========================================================================
+// 1. تعريف الجداول (Classes) - أضف هذا في بداية ملف main.js
+// ==========================================================================
+const FruitJackpotResults = Parse.Object.extend("FruitJackpotResults");
+const FruitJackpotBets = Parse.Object.extend("FruitJackpotBets");
+
+// ==========================================================================
+// 2. إعدادات اللعبة - أضف هذا تحت التعريفات
+// ==========================================================================
+const FJ_ROUND_DURATION = 30; // مدة الجولة بالثواني
+const FJ_MULTIPLIERS = {
+    'strawberry': 3,
+    'banana': 3,
+    'grape': 5,
+    'watermelon': 45,
+    'star': 25,
+    'apple': 5,
+    'peach': 25,
+    'lemon': 15,
+    'orange': 10
+};
+const FJ_FRUITS = Object.keys(FJ_MULTIPLIERS);
+
+// ==========================================================================
+// 3. الدوال السحابية (Cloud Functions) - أضفها في نهاية ملف main.js
+// ==========================================================================
+
+/**
+ * جلب معلومات اللعبة الحالية للمستخدم
+ */
+Parse.Cloud.define("fruit_jackpot_info", async (request) => {
+    const user = request.user;
+    if (!user) return { code: 700, message: "User not authenticated" };
+
+    await user.fetch({ useMasterKey: true });
+    const currentTime = Math.floor(Date.now() / 1000);
+    const currentRound = Math.floor(currentTime / FJ_ROUND_DURATION);
+    const countdown = FJ_ROUND_DURATION - (currentTime % FJ_ROUND_DURATION);
+
+    // جلب آخر 20 نتيجة من جدول النتائج
+    const resultsQuery = new Parse.Query(FruitJackpotResults);
+    resultsQuery.descending("round");
+    resultsQuery.limit(20);
+    const recentResults = await resultsQuery.find({ useMasterKey: true });
+
+    // جلب رهانات المستخدم في الجولة الحالية
+    const userBetsQuery = new Parse.Query(FruitJackpotBets);
+    userBetsQuery.equalTo("user", user);
+    userBetsQuery.equalTo("round", currentRound);
+    const userBets = await userBetsQuery.find({ useMasterKey: true });
+    
+    const betsMap = {};
+    userBets.forEach(b => { 
+        betsMap[b.get("choice")] = (betsMap[b.get("choice")] || 0) + b.get("amount"); 
+    });
+
+    return {
+        code: 200,
+        data: {
+            credits: user.get("credit") || 0, // الرصيد من حقل credit
+            round: currentRound,
+            countdown: countdown,
+            history: recentResults.map(r => ({
+                fruit: r.get("winningFruit"),
+                multiplier: r.get("multiplier")
+            })),
+            myBets: betsMap,
+            nickname: user.get('first_name') || user.get('username'),
+            avatar: user.get('avatar') ? (user.get('avatar').url ? user.get('avatar').url : user.get('avatar')) : ''
+        }
+    };
+});
+
+/**
+ * وضع رهان جديد
+ */
+Parse.Cloud.define("fruit_jackpot_bet", async (request) => {
+    const user = request.user;
+    if (!user) return { code: 700, message: "User not authenticated" };
+
+    const { choice, gold } = request.params;
+    if (!FJ_MULTIPLIERS[choice] || gold <= 0) return { code: 400, message: "Invalid bet" };
+
+    const currentTime = Math.floor(Date.now() / 1000);
+    const currentRound = Math.floor(currentTime / FJ_ROUND_DURATION);
+    const timeInRound = currentTime % FJ_ROUND_DURATION;
+
+    // إغلاق الرهان في آخر 5 ثوانٍ
+    if (timeInRound > FJ_ROUND_DURATION - 5) {
+        return { code: 403, message: "Betting closed for this round" };
+    }
+
+    await user.fetch({ useMasterKey: true });
+    const currentBalance = user.get("credit") || 0;
+
+    if (currentBalance < gold) {
+        return { code: 10062, message: "Insufficient balance" };
+    }
+
+    // خصم الرصيد فوراً
+    user.increment("credit", -gold);
+    await user.save(null, { useMasterKey: true });
+
+    // تسجيل الرهان في الجدول
+    const bet = new FruitJackpotBets();
+    bet.set("user", user);
+    bet.set("round", currentRound);
+    bet.set("choice", choice);
+    bet.set("amount", gold);
+    bet.set("isWinner", false);
+    await bet.save(null, { useMasterKey: true });
+
+    return { code: 200, newBalance: user.get("credit") };
+});
+
+/**
+ * دالة إنهاء الجولة وتوزيع الأرباح
+ * ملاحظة: يجب استدعاء هذه الدالة كل 30 ثانية عبر Cron Job
+ */
+Parse.Cloud.define("fruit_jackpot_process_round", async (request) => {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const currentRound = Math.floor(currentTime / FJ_ROUND_DURATION);
+    const roundToProcess = currentRound - 1;
+
+    // التأكد من عدم معالجة الجولة مرتين
+    const checkQuery = new Parse.Query(FruitJackpotResults);
+    checkQuery.equalTo("round", roundToProcess);
+    if (await checkQuery.first({ useMasterKey: true })) return "Already processed";
+
+    // 1. اختيار الفاكهة الفائزة (عشوائي)
+    const winningFruit = FJ_FRUITS[Math.floor(Math.random() * FJ_FRUITS.length)];
+    const multiplier = FJ_MULTIPLIERS[winningFruit];
+
+    // 2. حفظ النتيجة في الجدول
+    const resultRecord = new FruitJackpotResults();
+    resultRecord.set("round", roundToProcess);
+    resultRecord.set("winningFruit", winningFruit);
+    resultRecord.set("multiplier", multiplier);
+    await resultRecord.save(null, { useMasterKey: true });
+
+    // 3. البحث عن الرهانات الفائزة وتوزيع الأرباح
+    const betsQuery = new Parse.Query(FruitJackpotBets);
+    betsQuery.equalTo("round", roundToProcess);
+    betsQuery.equalTo("choice", winningFruit);
+    betsQuery.include("user");
+    const winningBets = await betsQuery.find({ useMasterKey: true });
+
+    for (const bet of winningBets) {
+        const winner = bet.get("user");
+        const winAmount = Math.floor(bet.get("amount") * multiplier);
+        
+        winner.increment("credit", winAmount);
+        await winner.save(null, { useMasterKey: true });
+        
+        bet.set("winAmount", winAmount);
+        bet.set("isWinner", true);
+        await bet.save(null, { useMasterKey: true });
+    }
+
+    return { status: "Success", winningFruit, winners: winningBets.length };
+});
+
 // إعدادات النظام الاقتصادية
 const PROFIT_SYSTEM = {
     SYSTEM_PROFIT_TARGET: 0.70,    // 70% ربح للنظام
