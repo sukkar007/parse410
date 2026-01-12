@@ -7,7 +7,7 @@ const OneSignal = require('@onesignal/node-onesignal');
 // OneSignal config
 const app_id = "7dec5bab-5550-4977-af9d-563e58d64721";
 const user_key_token = "os_v2_org_wodjnt6u6jbtfpzyvzkyd4t4dpujsuk7odcugsvr4uywsqaxkk6cyxxxwlfmu4ynfqoxo6rpb3nkze5of4s5qucezsymbmduqf3xmvy";
-const rest_api_key = "os_v2_app_pxwfxk2vkbexpl45ky7frvshefbsyfq7otfu4m4t3sbj7baj7jlgmslmijundbithwvrto254zqgupylqnau7omygess5d2qcjyt7ra";
+const rest_api_key = "os_v2_app_pxwfxk2vkbexpl45ky7frvshehu7v4u2rgje4ev6ualmcx5rqcswhfcygqybwr4qwt7u5omhi6kqctcgu3gmjeub7ks453ghicpmpdq";
 
 const REVENUECAT_API_KEY = process.env.REVENUECAT_API_KEY;
 
