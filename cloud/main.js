@@ -579,53 +579,48 @@ function getNickname(user) {
 //////////////////////////////////////////////////////////
 
 // 1. إرسال إشعار Push
+// 1. إرسال إشعار Push - متوافق مع كل الإشعارات
 Parse.Cloud.define('sendPush', async (request) => {
+  try {
+    const notification = new OneSignal.Notification();
+    notification.app_id = app_id;
+    notification.headings = { en: request.params.title || "Notification" };
+    notification.contents = { en: request.params.alert || "" };
 
-  var userQuery = new Parse.Query(Parse.User);
+    // أيقونة وصورة كبيرة
+    if (request.params.avatar) notification.large_icon = request.params.avatar;
+    if (request.params.big_picture) notification.big_picture = request.params.big_picture;
 
-  if(request.params.type == "live"){
+    // استهداف المستخدمين
+    if (request.params.type === "live" && Array.isArray(request.params.followers)) {
+      notification.include_external_user_ids = request.params.followers;
+    } else if (request.params.receiverId) {
+      notification.include_external_user_ids = [request.params.receiverId];
+    }
 
-    userQuery.containedIn("objectId", request.params.followers);
-  } else {
+    // بيانات إضافية للإشعار
+    notification.data = {
+      view: request.params.view,
+      alert: request.params.alert,
+      senderId: request.params.senderId,
+      senderName: request.params.senderName,
+      type: request.params.type,
+      chat: request.params.chat,
+      avatar: request.params.avatar,
+      objectId: request.params.objectId,
+    };
 
-    userQuery.equalTo("objectId", request.params.receiverId);
+    // إرسال الإشعار
+    await client.createNotification(notification);
+    console.log("✅ Push successfully sent");
+    return { status: "success", message: "Notification sent" };
+
+  } catch (error) {
+    console.error("❌ Push error:", error);
+    return Promise.reject(error);
   }
-
-  var pushQuery = new Parse.Query(Parse.Installation);
-  pushQuery.matchesQuery('user', userQuery);
-
-  const notification = new OneSignal.Notification();
-  notification.app_id = app_id;
-  notification.headings = { en: request.params.title};  
-  notification.contents = { en: request.params.alert};
-  notification.large_icon = request.params.avatar;
-  notification.big_picture = request.params.big_picture;
-  notification.target_channel = "Push";
-  notification.include_aliases = {
-    external_id: [request.params.receiverId]
-  };  
-  notification.data = {
-    view: request.params.view,
-    alert: request.params.alert,
-    senderId: request.params.senderId,
-    senderName: request.params.senderName,
-    type: request.params.type,
-    chat: request.params.chat,
-    avatar: request.params.avatar,
-    objectId: request.params.objectId,
-  };  
-
-  return client.createNotification(notification)
-    .then(function () {
-      // Push sent!
-      console.log("Push successfully");
-      return "sent";
-    }, function (error) {
-      // There was a problem :(
-        console.log("Push Got an error " + error.code + " : " + error.message);
-        return Promise.reject(error);
-    });
 });
+
 
 // 2. تحديث كلمة المرور
 Parse.Cloud.define("updatePassword", async (request) => {
