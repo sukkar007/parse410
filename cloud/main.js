@@ -580,45 +580,51 @@ function getNickname(user) {
 
 // 1. إرسال إشعار Push
 Parse.Cloud.define('sendPush', async (request) => {
-    const { type, receiverId, followers, title, alert, avatar, big_picture, view, senderId, senderName, chat, objectId } = request.params;
-    
-    let userQuery = new Parse.Query(Parse.User);
-    
-    if (type == "live") {
-        userQuery.containedIn("objectId", followers);
-    } else {
-        userQuery.equalTo("objectId", receiverId);
-    }
 
-    const notification = new OneSignal.Notification();
-    notification.app_id = app_id;
-    notification.headings = { en: title };  
-    notification.contents = { en: alert };
-    notification.large_icon = avatar;
-    notification.big_picture = big_picture;
-    notification.target_channel = "Push";
-    notification.include_aliases = {
-        external_id: [receiverId]
-    };  
-    notification.data = {
-        view: view,
-        alert: alert,
-        senderId: senderId,
-        senderName: senderName,
-        type: type,
-        chat: chat,
-        avatar: avatar,
-        objectId: objectId,
-    };
+  var userQuery = new Parse.Query(Parse.User);
 
-    try {
-        const response = await client.createNotification(notification);
-        console.log("✅ Push notification sent successfully");
-        return "sent";
-    } catch (error) {
-        console.error("❌ Push notification error:", error);
-        throw new Parse.Error(Parse.Error.SCRIPT_FAILED, `Push failed: ${error.message}`);
-    }
+  if(request.params.type == "live"){
+
+    userQuery.containedIn("objectId", request.params.followers);
+  } else {
+
+    userQuery.equalTo("objectId", request.params.receiverId);
+  }
+
+  var pushQuery = new Parse.Query(Parse.Installation);
+  pushQuery.matchesQuery('user', userQuery);
+
+  const notification = new OneSignal.Notification();
+  notification.app_id = app_id;
+  notification.headings = { en: request.params.title};  
+  notification.contents = { en: request.params.alert};
+  notification.large_icon = request.params.avatar;
+  notification.big_picture = request.params.big_picture;
+  notification.target_channel = "Push";
+  notification.include_aliases = {
+    external_id: [request.params.receiverId]
+  };  
+  notification.data = {
+    view: request.params.view,
+    alert: request.params.alert,
+    senderId: request.params.senderId,
+    senderName: request.params.senderName,
+    type: request.params.type,
+    chat: request.params.chat,
+    avatar: request.params.avatar,
+    objectId: request.params.objectId,
+  };  
+
+  return client.createNotification(notification)
+    .then(function () {
+      // Push sent!
+      console.log("Push successfully");
+      return "sent";
+    }, function (error) {
+      // There was a problem :(
+        console.log("Push Got an error " + error.code + " : " + error.message);
+        return Promise.reject(error);
+    });
 });
 
 // 2. تحديث كلمة المرور
